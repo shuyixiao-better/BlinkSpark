@@ -1,0 +1,18 @@
+[package]
+name = "blinkspark"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform 20-20-20 blink reminder"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+notify-rust = "4"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+mac-notification-sys = "0.6"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winrt-notification = "0.5"
