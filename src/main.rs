@@ -343,6 +343,13 @@ fn save_window_position(path: &PathBuf, pos: egui::Pos2) -> io::Result<()> {
     fs::write(path, format!("{:.2},{:.2}\n", pos.x, pos.y))
 }
 
+fn load_app_icon() -> Option<egui::IconData> {
+    eframe::icon_data::from_png_bytes(include_bytes!(
+        "../assets/branding/generated/blinkspark-icon-256.png"
+    ))
+    .ok()
+}
+
 fn main() -> eframe::Result {
     let args = Args::parse();
 
@@ -353,12 +360,16 @@ fn main() -> eframe::Result {
 
     let window_size = egui::vec2(320.0, 190.0);
     let saved_position = load_saved_window_position();
-    let viewport = egui::ViewportBuilder::default()
+    let mut viewport = egui::ViewportBuilder::default()
         .with_title("BlinkSpark")
         .with_inner_size(window_size)
         .with_min_inner_size(window_size)
         .with_position(saved_position.unwrap_or_else(|| initial_window_pos(window_size)))
         .with_resizable(false);
+
+    if let Some(icon) = load_app_icon() {
+        viewport = viewport.with_icon(icon);
+    }
 
     let native_options = eframe::NativeOptions {
         viewport,

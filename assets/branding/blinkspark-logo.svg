@@ -1,27 +1,29 @@
 <svg width="1400" height="420" viewBox="0 0 1400 420" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="badge" x1="40" y1="40" x2="380" y2="380" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0B3258"/>
-      <stop offset="1" stop-color="#0E79B2"/>
+      <stop stop-color="#07182A"/>
+      <stop offset="1" stop-color="#12517A"/>
     </linearGradient>
-    <linearGradient id="textSpark" x1="646" y1="110" x2="1032" y2="302" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0E79B2"/>
-      <stop offset="1" stop-color="#23B9E8"/>
+    <linearGradient id="wordSpark" x1="742" y1="96" x2="1028" y2="284" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1A86C7"/>
+      <stop offset="1" stop-color="#2FC3F2"/>
     </linearGradient>
-    <radialGradient id="iris" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(210 210) rotate(90) scale(62)">
-      <stop stop-color="#C5F7FF"/>
-      <stop offset="1" stop-color="#26B7E8"/>
+    <radialGradient id="iris" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(210 216) rotate(90) scale(58)">
+      <stop stop-color="#ABF8FF"/>
+      <stop offset="1" stop-color="#1499D5"/>
     </radialGradient>
   </defs>
 
   <rect x="40" y="40" width="340" height="340" rx="88" fill="url(#badge)"/>
-  <circle cx="210" cy="210" r="124" stroke="#D6F8FF" stroke-width="14" stroke-dasharray="62 18 34 18"/>
-  <ellipse cx="210" cy="210" rx="108" ry="56" fill="#EAF8FF" fill-opacity="0.96"/>
-  <circle cx="210" cy="210" r="62" fill="url(#iris)"/>
-  <circle cx="210" cy="210" r="28" fill="#08233D"/>
-  <path d="M264 152L274 172L296 176L280 192L284 214L264 204L244 214L248 192L232 176L254 172L264 152Z" fill="#FFFFFF"/>
+  <path d="M314 116A122 122 0 0 1 270 306" stroke="#B6EEFF" stroke-opacity="0.65" stroke-width="10" stroke-linecap="round"/>
+  <path d="M132 282A122 122 0 0 1 102 178" stroke="#B6EEFF" stroke-opacity="0.65" stroke-width="10" stroke-linecap="round"/>
+  <path d="M95 214C130 166 168 172 210 172C252 172 290 166 325 214C290 262 252 256 210 256C168 256 130 262 95 214Z" fill="#EAF6FF"/>
+  <path d="M112 214C152 184 268 184 308 214" stroke="#7ADEFF" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="210" cy="216" r="58" fill="url(#iris)"/>
+  <circle cx="210" cy="216" r="25" fill="#081F34"/>
+  <path d="M284 154L292 168L307 176L292 184L284 198L276 184L261 176L276 168L284 154Z" fill="#FFE5A7"/>
 
-  <text x="430" y="218" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif" font-size="126" font-weight="700" letter-spacing="1" fill="#123A5F">Blink</text>
-  <text x="742" y="218" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif" font-size="126" font-weight="700" letter-spacing="1" fill="url(#textSpark)">Spark</text>
-  <text x="434" y="290" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif" font-size="38" font-weight="500" letter-spacing="1.2" fill="#2E648C">20-20-20 Eye Break Reminder</text>
+  <text x="430" y="218" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif" font-size="126" font-weight="700" letter-spacing="0.8" fill="#123A5F">Blink</text>
+  <text x="742" y="218" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif" font-size="126" font-weight="700" letter-spacing="0.8" fill="url(#wordSpark)">Spark</text>
+  <text x="434" y="292" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif" font-size="34" font-weight="500" letter-spacing="1.1" fill="#2F6488">Healthy focus, every 20 minutes</text>
 </svg>
