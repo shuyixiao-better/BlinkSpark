@@ -1,0 +1,37 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="120" x2="904" y2="904" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B3258"/>
+      <stop offset="1" stop-color="#0E79B2"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="246" y1="266" x2="776" y2="776" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9AE6FF"/>
+      <stop offset="1" stop-color="#D8FAFF"/>
+    </linearGradient>
+    <radialGradient id="iris" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 512) rotate(90) scale(130)">
+      <stop stop-color="#C5F7FF"/>
+      <stop offset="1" stop-color="#26B7E8"/>
+    </radialGradient>
+    <filter id="softGlow" x="146" y="166" width="732" height="732" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+  </defs>
+
+  <rect x="56" y="56" width="912" height="912" rx="220" fill="url(#bg)"/>
+
+  <circle cx="512" cy="512" r="336" stroke="url(#ring)" stroke-width="38" stroke-linecap="round" stroke-dasharray="170 56 88 56"/>
+  <circle cx="512" cy="512" r="336" stroke="#E8FCFF" stroke-opacity="0.14" stroke-width="18"/>
+
+  <ellipse cx="512" cy="512" rx="288" ry="148" fill="#EAF8FF" fill-opacity="0.96"/>
+  <path d="M224 512C294 408 387 356 512 356C637 356 730 408 800 512" stroke="#FFFFFF" stroke-opacity="0.65" stroke-width="18" stroke-linecap="round"/>
+  <path d="M224 512C294 616 387 668 512 668C637 668 730 616 800 512" stroke="#CFEFFF" stroke-opacity="0.55" stroke-width="18" stroke-linecap="round"/>
+
+  <circle cx="512" cy="512" r="128" fill="url(#iris)"/>
+  <circle cx="512" cy="512" r="58" fill="#08233D"/>
+  <circle cx="477" cy="476" r="16" fill="#F1FDFF"/>
+
+  <g filter="url(#softGlow)">
+    <path d="M650 430L674 474L724 484L686 522L694 574L650 550L606 574L614 522L576 484L626 474L650 430Z" fill="#ECFDFF" fill-opacity="0.65"/>
+  </g>
+  <path d="M650 430L674 474L724 484L686 522L694 574L650 550L606 574L614 522L576 484L626 474L650 430Z" fill="#FFFFFF"/>
+</svg>

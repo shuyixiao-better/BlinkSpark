@@ -18,3 +18,6 @@ mac-notification-sys = "0.6"
 [target.'cfg(target_os = "windows")'.dependencies]
 winrt-notification = "0.5"
 windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"

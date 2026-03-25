@@ -1,0 +1,27 @@
+<svg width="1400" height="420" viewBox="0 0 1400 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="badge" x1="40" y1="40" x2="380" y2="380" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B3258"/>
+      <stop offset="1" stop-color="#0E79B2"/>
+    </linearGradient>
+    <linearGradient id="textSpark" x1="646" y1="110" x2="1032" y2="302" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0E79B2"/>
+      <stop offset="1" stop-color="#23B9E8"/>
+    </linearGradient>
+    <radialGradient id="iris" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(210 210) rotate(90) scale(62)">
+      <stop stop-color="#C5F7FF"/>
+      <stop offset="1" stop-color="#26B7E8"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="40" y="40" width="340" height="340" rx="88" fill="url(#badge)"/>
+  <circle cx="210" cy="210" r="124" stroke="#D6F8FF" stroke-width="14" stroke-dasharray="62 18 34 18"/>
+  <ellipse cx="210" cy="210" rx="108" ry="56" fill="#EAF8FF" fill-opacity="0.96"/>
+  <circle cx="210" cy="210" r="62" fill="url(#iris)"/>
+  <circle cx="210" cy="210" r="28" fill="#08233D"/>
+  <path d="M264 152L274 172L296 176L280 192L284 214L264 204L244 214L248 192L232 176L254 172L264 152Z" fill="#FFFFFF"/>
+
+  <text x="430" y="218" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif" font-size="126" font-weight="700" letter-spacing="1" fill="#123A5F">Blink</text>
+  <text x="742" y="218" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif" font-size="126" font-weight="700" letter-spacing="1" fill="url(#textSpark)">Spark</text>
+  <text x="434" y="290" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif" font-size="38" font-weight="500" letter-spacing="1.2" fill="#2E648C">20-20-20 Eye Break Reminder</text>
+</svg>
