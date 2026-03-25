@@ -10,3 +10,5 @@
 /httpRequests/
 
 .idea/
+/target
+Cargo.lock

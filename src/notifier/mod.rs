@@ -20,13 +20,13 @@ mod platform {
 
 #[cfg(target_os = "windows")]
 mod platform {
-    use winrt_notification::{Toast, ToastDuration};
+    use winrt_notification::{Duration, Toast};
 
     pub fn notify(title: &str, body: &str) -> Result<(), String> {
         Toast::new(Toast::POWERSHELL_APP_ID)
             .title(title)
             .text1(body)
-            .duration(ToastDuration::Short)
+            .duration(Duration::Short)
             .show()
             .map_err(|err| err.to_string())
     }
