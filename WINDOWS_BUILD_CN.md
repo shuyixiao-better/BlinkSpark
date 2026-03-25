@@ -55,7 +55,9 @@ E:\RustroverProjects\BlinkSpark\target\release\blinkspark.exe
 .\target\release\blinkspark.exe
 ```
 
-说明：默认会持续运行，并按设定间隔循环提醒；期间黑窗口无输出是正常现象。
+说明：启动后会出现倒计时小窗（默认右下角，可自由拖动），并按设定间隔循环提醒。
+说明：界面默认英文，可在窗口中随时切换中文/英文。
+说明：窗口位置会自动保存，下次启动会恢复到上次拖拽位置。
 
 ### 3.2 快速验证（1 分钟）
 
@@ -75,10 +77,10 @@ E:\RustroverProjects\BlinkSpark\target\release\blinkspark.exe
 .\target\release\blinkspark.exe --interval 20 --once
 ```
 
-### 3.5 英文提醒文案
+### 3.5 中文界面/通知
 
 ```powershell
-.\target\release\blinkspark.exe --lang en
+.\target\release\blinkspark.exe --lang zh
 ```
 
 ## 4. 常见报错与处理

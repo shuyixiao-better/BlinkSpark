@@ -7,6 +7,7 @@ license = "MIT"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
+eframe = "0.33.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 notify-rust = "4"
@@ -16,3 +17,4 @@ mac-notification-sys = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winrt-notification = "0.5"
+windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }
