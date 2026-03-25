@@ -55,7 +55,7 @@ E:\RustroverProjects\BlinkSpark\target\release\blinkspark.exe
 .\target\release\blinkspark.exe
 ```
 
-说明：默认会等待 20 分钟后提醒一次，期间黑窗口无输出是正常现象。
+说明：默认会持续运行，并按设定间隔循环提醒；期间黑窗口无输出是正常现象。
 
 ### 3.2 快速验证（1 分钟）
 
@@ -63,13 +63,19 @@ E:\RustroverProjects\BlinkSpark\target\release\blinkspark.exe
 .\target\release\blinkspark.exe --interval 1
 ```
 
-### 3.3 循环提醒
+### 3.3 循环提醒（默认行为）
 
 ```powershell
-.\target\release\blinkspark.exe --interval 20 --repeat
+.\target\release\blinkspark.exe --interval 20
 ```
 
-### 3.4 英文提醒文案
+### 3.4 仅提醒一次后退出
+
+```powershell
+.\target\release\blinkspark.exe --interval 20 --once
+```
+
+### 3.5 英文提醒文案
 
 ```powershell
 .\target\release\blinkspark.exe --lang en

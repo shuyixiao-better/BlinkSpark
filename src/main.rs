@@ -15,8 +15,12 @@ struct Args {
     #[arg(long, default_value_t = 20)]
     interval: u64,
 
-    /// Repeat reminders every interval until interrupted
+    /// Send one reminder and exit
     #[arg(long, default_value_t = false)]
+    once: bool,
+
+    /// Repeat reminders every interval until interrupted (legacy option; now default)
+    #[arg(long, default_value_t = false, hide = true)]
     repeat: bool,
 }
 
@@ -52,18 +56,18 @@ fn main() {
     let interval = Duration::from_secs(args.interval.saturating_mul(60));
     let (title, body) = args.lang.message();
 
-    if args.repeat {
+    if args.once && !args.repeat {
+        std::thread::sleep(interval);
+        if let Err(err) = notifier::notify(title, body) {
+            eprintln!("failed to send notification: {err}");
+            std::process::exit(1);
+        }
+    } else {
         loop {
             std::thread::sleep(interval);
             if let Err(err) = notifier::notify(title, body) {
                 eprintln!("failed to send notification: {err}");
             }
-        }
-    } else {
-        std::thread::sleep(interval);
-        if let Err(err) = notifier::notify(title, body) {
-            eprintln!("failed to send notification: {err}");
-            std::process::exit(1);
         }
     }
 }
