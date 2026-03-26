@@ -314,27 +314,23 @@ impl eframe::App for CountdownApp {
                     );
                 }
 
-                let bottom_row_height = 34.0;
-                ui.add_space((ui.available_height() - bottom_row_height).max(0.0));
-
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new(self.lang.drag_hint())
-                            .size(12.0)
-                            .color(egui::Color32::from_rgb(117, 130, 146)),
-                    );
-
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .add_sized(
-                                [132.0, 28.0],
-                                egui::Button::new(self.lang.reset_button_label()),
-                            )
-                            .clicked()
-                        {
-                            self.reset_timer();
-                        }
-                    });
+                ui.add_space((ui.available_height() - 66.0).max(0.0));
+                ui.label(
+                    egui::RichText::new(self.lang.drag_hint())
+                        .size(12.0)
+                        .color(egui::Color32::from_rgb(117, 130, 146)),
+                );
+                ui.add_space(6.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .add_sized(
+                            [132.0, 28.0],
+                            egui::Button::new(self.lang.reset_button_label()),
+                        )
+                        .clicked()
+                    {
+                        self.reset_timer();
+                    }
                 });
             });
     }
@@ -356,7 +352,15 @@ fn format_countdown(remaining: Duration) -> String {
 fn countdown_progress(interval: Duration, remaining: Duration) -> f32 {
     let total = interval.as_secs_f32().max(1.0);
     let left = remaining.as_secs_f32().clamp(0.0, total);
-    (left / total).clamp(0.0, 1.0)
+    let ratio = (left / total).clamp(0.0, 1.0);
+    // Keep the first/last instant visually clean so the bar appears symmetric.
+    if ratio >= 0.995 {
+        1.0
+    } else if ratio <= 0.005 {
+        0.0
+    } else {
+        ratio
+    }
 }
 
 fn lerp_u8(from: u8, to: u8, t: f32) -> u8 {
@@ -573,6 +577,18 @@ mod tests {
         assert_eq!(
             countdown_progress(Duration::from_secs(60), Duration::from_secs(90)),
             1.0
+        );
+    }
+
+    #[test]
+    fn countdown_progress_snaps_near_edges_for_clean_rendering() {
+        assert_eq!(
+            countdown_progress(Duration::from_secs(1200), Duration::from_secs(1195)),
+            1.0
+        );
+        assert_eq!(
+            countdown_progress(Duration::from_secs(1200), Duration::from_secs(5)),
+            0.0
         );
     }
 }
