@@ -221,7 +221,7 @@ impl eframe::App for CountdownApp {
 
         let remaining = self.next_deadline.saturating_duration_since(Instant::now());
         let progress = countdown_progress(self.interval, remaining);
-        let accent = progress_accent_color(progress);
+        let accent = progress_accent_color(1.0 - progress);
 
         egui::CentralPanel::default()
             .frame(
@@ -296,23 +296,7 @@ impl eframe::App for CountdownApp {
                     {
                         self.lang = Lang::Zh;
                     }
-                    if ui
-                        .add_sized(
-                            [128.0, 28.0],
-                            egui::Button::new(self.lang.reset_button_label()),
-                        )
-                        .clicked()
-                    {
-                        self.reset_timer();
-                    }
                 });
-
-                ui.add_space(4.0);
-                ui.label(
-                    egui::RichText::new(self.lang.drag_hint())
-                        .size(12.0)
-                        .color(egui::Color32::from_rgb(117, 130, 146)),
-                );
 
                 if let Some(err) = &self.last_error {
                     ui.add_space(6.0);
@@ -329,6 +313,29 @@ impl eframe::App for CountdownApp {
                         format!("{} {}", self.lang.position_error_prefix(), err),
                     );
                 }
+
+                let bottom_row_height = 34.0;
+                ui.add_space((ui.available_height() - bottom_row_height).max(0.0));
+
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(self.lang.drag_hint())
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(117, 130, 146)),
+                    );
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add_sized(
+                                [132.0, 28.0],
+                                egui::Button::new(self.lang.reset_button_label()),
+                            )
+                            .clicked()
+                        {
+                            self.reset_timer();
+                        }
+                    });
+                });
             });
     }
 }
@@ -349,7 +356,7 @@ fn format_countdown(remaining: Duration) -> String {
 fn countdown_progress(interval: Duration, remaining: Duration) -> f32 {
     let total = interval.as_secs_f32().max(1.0);
     let left = remaining.as_secs_f32().clamp(0.0, total);
-    (1.0 - left / total).clamp(0.0, 1.0)
+    (left / total).clamp(0.0, 1.0)
 }
 
 fn lerp_u8(from: u8, to: u8, t: f32) -> u8 {
@@ -557,15 +564,15 @@ mod tests {
     fn countdown_progress_clamps_between_zero_and_one() {
         assert_eq!(
             countdown_progress(Duration::from_secs(60), Duration::from_secs(60)),
-            0.0
-        );
-        assert_eq!(
-            countdown_progress(Duration::from_secs(60), Duration::from_secs(0)),
             1.0
         );
         assert_eq!(
-            countdown_progress(Duration::from_secs(60), Duration::from_secs(90)),
+            countdown_progress(Duration::from_secs(60), Duration::from_secs(0)),
             0.0
+        );
+        assert_eq!(
+            countdown_progress(Duration::from_secs(60), Duration::from_secs(90)),
+            1.0
         );
     }
 }
