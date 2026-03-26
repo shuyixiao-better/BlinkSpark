@@ -89,6 +89,13 @@ impl Lang {
         }
     }
 
+    fn reset_button_label(self) -> &'static str {
+        match self {
+            Lang::Zh => "重置计时",
+            Lang::En => "Reset timer",
+        }
+    }
+
     fn notify_error_prefix(self) -> &'static str {
         match self {
             Lang::Zh => "通知失败：",
@@ -154,6 +161,10 @@ impl CountdownApp {
                 self.next_deadline += self.interval;
             }
         }
+    }
+
+    fn reset_timer(&mut self) {
+        self.next_deadline = Instant::now() + self.interval;
     }
 
     fn maybe_persist_window_position(&mut self, ctx: &egui::Context, force: bool) {
@@ -224,16 +235,20 @@ impl eframe::App for CountdownApp {
             ui.horizontal(|ui| {
                 ui.label(self.lang.language_label());
                 if ui
-                    .selectable_label(self.lang == Lang::En, "English")
+                    .selectable_label(self.lang == Lang::En, "EN")
                     .clicked()
                 {
                     self.lang = Lang::En;
                 }
                 if ui
-                    .selectable_label(self.lang == Lang::Zh, "中文")
+                    .selectable_label(self.lang == Lang::Zh, "ZH")
                     .clicked()
                 {
                     self.lang = Lang::Zh;
+                }
+
+                if ui.button(self.lang.reset_button_label()).clicked() {
+                    self.reset_timer();
                 }
             });
 
@@ -358,7 +373,7 @@ fn main() -> eframe::Result {
         std::process::exit(2);
     }
 
-    let window_size = egui::vec2(320.0, 190.0);
+    let window_size = egui::vec2(360.0, 210.0);
     let saved_position = load_saved_window_position();
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("BlinkSpark")
