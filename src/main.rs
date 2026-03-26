@@ -278,7 +278,7 @@ impl eframe::App for CountdownApp {
                     });
 
                 ui.add_space(8.0);
-                ui.horizontal_wrapped(|ui| {
+                ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new(self.lang.language_label())
                             .size(13.0)
@@ -315,30 +315,28 @@ impl eframe::App for CountdownApp {
                     );
                 }
 
-                ui.add_space(6.0);
-                ui.allocate_ui_with_layout(
-                    ui.available_size(),
-                    egui::Layout::bottom_up(egui::Align::Min),
-                    |ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui
-                                .add_sized(
-                                    [132.0, 28.0],
-                                    egui::Button::new(self.lang.reset_button_label()),
-                                )
-                                .clicked()
-                            {
-                                self.reset_timer();
-                            }
-                        });
-                        ui.add_space(4.0);
-                        ui.label(
-                            egui::RichText::new(self.lang.drag_hint())
-                                .size(12.0)
-                                .color(egui::Color32::from_rgb(117, 130, 146)),
-                        );
-                    },
+                const FOOTER_HEIGHT: f32 = 52.0;
+                ui.add_space(footer_spacer(ui.available_height(), FOOTER_HEIGHT));
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(self.lang.drag_hint())
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(117, 130, 146)),
+                    )
+                    .truncate(),
                 );
+                ui.add_space(6.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .add_sized(
+                            [132.0, 28.0],
+                            egui::Button::new(self.lang.reset_button_label()),
+                        )
+                        .clicked()
+                    {
+                        self.reset_timer();
+                    }
+                });
             });
     }
 }
@@ -360,6 +358,10 @@ fn countdown_progress(interval: Duration, remaining: Duration) -> f32 {
     let total = interval.as_secs_f32().max(1.0);
     let left = remaining.as_secs_f32().clamp(0.0, total);
     (left / total).clamp(0.0, 1.0)
+}
+
+fn footer_spacer(available_height: f32, footer_height: f32) -> f32 {
+    (available_height - footer_height).max(0.0)
 }
 
 fn lerp_u8(from: u8, to: u8, t: f32) -> u8 {
@@ -520,12 +522,12 @@ fn main() -> eframe::Result {
         std::process::exit(2);
     }
 
-    let window_size = egui::vec2(420.0, 270.0);
+    let window_size = egui::vec2(420.0, 290.0);
     let saved_position = load_saved_window_position();
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("BlinkSpark")
         .with_inner_size(window_size)
-        .with_min_inner_size(egui::vec2(380.0, 250.0))
+        .with_min_inner_size(egui::vec2(380.0, 270.0))
         .with_position(saved_position.unwrap_or_else(|| initial_window_pos(window_size)))
         .with_resizable(true);
 
@@ -586,5 +588,11 @@ mod tests {
 
         assert!((almost_full - (1195.0 / 1200.0)).abs() < 1e-6);
         assert!((almost_empty - (5.0 / 1200.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn footer_spacer_never_negative() {
+        assert_eq!(footer_spacer(60.0, 52.0), 8.0);
+        assert_eq!(footer_spacer(20.0, 52.0), 0.0);
     }
 }
