@@ -365,6 +365,42 @@ fn load_app_icon() -> Option<egui::IconData> {
     .ok()
 }
 
+#[cfg(target_os = "windows")]
+fn load_windows_cjk_font_bytes() -> Option<Vec<u8>> {
+    let candidates = [
+        r"C:\Windows\Fonts\NotoSansSC-VF.ttf",
+        r"C:\Windows\Fonts\simhei.ttf",
+        r"C:\Windows\Fonts\simsunb.ttf",
+    ];
+
+    candidates.iter().find_map(|path| fs::read(path).ok())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn load_windows_cjk_font_bytes() -> Option<Vec<u8>> {
+    None
+}
+
+fn configure_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+
+    if let Some(font_bytes) = load_windows_cjk_font_bytes() {
+        fonts.font_data.insert(
+            "cjk".to_string(),
+            std::sync::Arc::new(egui::FontData::from_owned(font_bytes)),
+        );
+
+        if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+            family.insert(0, "cjk".to_string());
+        }
+        if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
+            family.insert(0, "cjk".to_string());
+        }
+    }
+
+    ctx.set_fonts(fonts);
+}
+
 fn main() -> eframe::Result {
     let args = Args::parse();
 
@@ -394,6 +430,9 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "BlinkSpark",
         native_options,
-        Box::new(move |_cc| Ok(Box::new(CountdownApp::new(args, saved_position)))),
+        Box::new(move |cc| {
+            configure_fonts(&cc.egui_ctx);
+            Ok(Box::new(CountdownApp::new(args, saved_position)))
+        }),
     )
 }
