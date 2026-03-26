@@ -220,54 +220,116 @@ impl eframe::App for CountdownApp {
         ctx.request_repaint_after(Duration::from_millis(200));
 
         let remaining = self.next_deadline.saturating_duration_since(Instant::now());
+        let progress = countdown_progress(self.interval, remaining);
+        let accent = progress_accent_color(progress);
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading(self.lang.window_title());
-            ui.separator();
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::default()
+                    .fill(egui::Color32::from_rgb(240, 245, 250))
+                    .inner_margin(egui::Margin::same(16)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(self.lang.window_title())
+                            .size(25.0)
+                            .strong()
+                            .color(egui::Color32::from_rgb(25, 52, 77)),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            egui::RichText::new(self.lang.mode_label(self.once_mode))
+                                .size(13.0)
+                                .color(egui::Color32::from_rgb(90, 107, 126)),
+                        );
+                    });
+                });
+                ui.add_space(6.0);
+                ui.separator();
+                ui.add_space(4.0);
 
-            ui.label(self.lang.countdown_label());
-            ui.heading(format_countdown(remaining));
+                egui::Frame::default()
+                    .fill(egui::Color32::from_rgb(252, 254, 255))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(221, 231, 240)))
+                    .corner_radius(egui::CornerRadius::same(16))
+                    .inner_margin(egui::Margin::same(14))
+                    .show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(self.lang.countdown_label())
+                                .size(14.0)
+                                .color(egui::Color32::from_rgb(104, 119, 136)),
+                        );
+                        ui.add_space(2.0);
+                        ui.label(
+                            egui::RichText::new(format_countdown(remaining))
+                                .size(48.0)
+                                .monospace()
+                                .strong()
+                                .color(egui::Color32::from_rgb(28, 44, 62)),
+                        );
+                        ui.add_space(8.0);
+                        ui.add(
+                            egui::ProgressBar::new(progress)
+                                .desired_width(f32::INFINITY)
+                                .fill(accent),
+                        );
+                    });
 
-            ui.separator();
-            ui.label(self.lang.mode_label(self.once_mode));
-            ui.label(self.lang.drag_hint());
+                ui.add_space(8.0);
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        egui::RichText::new(self.lang.language_label())
+                            .size(13.0)
+                            .color(egui::Color32::from_rgb(97, 112, 129)),
+                    );
 
-            ui.horizontal(|ui| {
-                ui.label(self.lang.language_label());
-                if ui
-                    .selectable_label(self.lang == Lang::En, "EN")
-                    .clicked()
-                {
-                    self.lang = Lang::En;
+                    if ui
+                        .add(egui::Button::new("EN").selected(self.lang == Lang::En))
+                        .clicked()
+                    {
+                        self.lang = Lang::En;
+                    }
+                    if ui
+                        .add(egui::Button::new("ZH").selected(self.lang == Lang::Zh))
+                        .clicked()
+                    {
+                        self.lang = Lang::Zh;
+                    }
+                    if ui
+                        .add_sized(
+                            [128.0, 28.0],
+                            egui::Button::new(self.lang.reset_button_label()),
+                        )
+                        .clicked()
+                    {
+                        self.reset_timer();
+                    }
+                });
+
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(self.lang.drag_hint())
+                        .size(12.0)
+                        .color(egui::Color32::from_rgb(117, 130, 146)),
+                );
+
+                if let Some(err) = &self.last_error {
+                    ui.add_space(6.0);
+                    ui.colored_label(
+                        egui::Color32::from_rgb(195, 56, 56),
+                        format!("{} {}", self.lang.notify_error_prefix(), err),
+                    );
                 }
-                if ui
-                    .selectable_label(self.lang == Lang::Zh, "ZH")
-                    .clicked()
-                {
-                    self.lang = Lang::Zh;
-                }
 
-                if ui.button(self.lang.reset_button_label()).clicked() {
-                    self.reset_timer();
+                if let Some(err) = &self.last_position_error {
+                    ui.add_space(6.0);
+                    ui.colored_label(
+                        egui::Color32::from_rgb(195, 56, 56),
+                        format!("{} {}", self.lang.position_error_prefix(), err),
+                    );
                 }
             });
-
-            if let Some(err) = &self.last_error {
-                ui.separator();
-                ui.colored_label(
-                    egui::Color32::from_rgb(220, 80, 80),
-                    format!("{} {}", self.lang.notify_error_prefix(), err),
-                );
-            }
-
-            if let Some(err) = &self.last_position_error {
-                ui.separator();
-                ui.colored_label(
-                    egui::Color32::from_rgb(220, 80, 80),
-                    format!("{} {}", self.lang.position_error_prefix(), err),
-                );
-            }
-        });
     }
 }
 
@@ -282,6 +344,26 @@ fn format_countdown(remaining: Duration) -> String {
     } else {
         format!("{minutes:02}:{secs:02}")
     }
+}
+
+fn countdown_progress(interval: Duration, remaining: Duration) -> f32 {
+    let total = interval.as_secs_f32().max(1.0);
+    let left = remaining.as_secs_f32().clamp(0.0, total);
+    (1.0 - left / total).clamp(0.0, 1.0)
+}
+
+fn lerp_u8(from: u8, to: u8, t: f32) -> u8 {
+    let t = t.clamp(0.0, 1.0);
+    (from as f32 + (to as f32 - from as f32) * t).round() as u8
+}
+
+fn progress_accent_color(progress: f32) -> egui::Color32 {
+    let t = progress.clamp(0.0, 1.0);
+    egui::Color32::from_rgb(
+        lerp_u8(33, 240, t),
+        lerp_u8(133, 134, t),
+        lerp_u8(94, 64, t),
+    )
 }
 
 #[cfg(target_os = "windows")]
@@ -401,6 +483,25 @@ fn configure_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+fn configure_visuals(ctx: &egui::Context) {
+    let mut style = (*ctx.style()).clone();
+    style.spacing.item_spacing = egui::vec2(8.0, 8.0);
+    style.spacing.button_padding = egui::vec2(12.0, 6.0);
+
+    let mut visuals = egui::Visuals::light();
+    visuals.panel_fill = egui::Color32::from_rgb(240, 245, 250);
+    visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(240, 245, 250);
+    visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(232, 238, 245);
+    visuals.widgets.inactive.fg_stroke.color = egui::Color32::from_rgb(40, 64, 89);
+    visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(220, 233, 245);
+    visuals.widgets.active.bg_fill = egui::Color32::from_rgb(206, 224, 241);
+    visuals.selection.bg_fill = egui::Color32::from_rgb(217, 229, 242);
+    visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(62, 95, 126));
+    style.visuals = visuals;
+
+    ctx.set_style(style);
+}
+
 fn main() -> eframe::Result {
     let args = Args::parse();
 
@@ -409,14 +510,14 @@ fn main() -> eframe::Result {
         std::process::exit(2);
     }
 
-    let window_size = egui::vec2(360.0, 210.0);
+    let window_size = egui::vec2(420.0, 270.0);
     let saved_position = load_saved_window_position();
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("BlinkSpark")
         .with_inner_size(window_size)
-        .with_min_inner_size(window_size)
+        .with_min_inner_size(egui::vec2(380.0, 250.0))
         .with_position(saved_position.unwrap_or_else(|| initial_window_pos(window_size)))
-        .with_resizable(false);
+        .with_resizable(true);
 
     if let Some(icon) = load_app_icon() {
         viewport = viewport.with_icon(icon);
@@ -432,7 +533,39 @@ fn main() -> eframe::Result {
         native_options,
         Box::new(move |cc| {
             configure_fonts(&cc.egui_ctx);
+            configure_visuals(&cc.egui_ctx);
             Ok(Box::new(CountdownApp::new(args, saved_position)))
         }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_countdown_uses_minutes_and_seconds_for_short_duration() {
+        assert_eq!(format_countdown(Duration::from_secs(65)), "01:05");
+    }
+
+    #[test]
+    fn format_countdown_includes_hours_for_long_duration() {
+        assert_eq!(format_countdown(Duration::from_secs(3661)), "01:01:01");
+    }
+
+    #[test]
+    fn countdown_progress_clamps_between_zero_and_one() {
+        assert_eq!(
+            countdown_progress(Duration::from_secs(60), Duration::from_secs(60)),
+            0.0
+        );
+        assert_eq!(
+            countdown_progress(Duration::from_secs(60), Duration::from_secs(0)),
+            1.0
+        );
+        assert_eq!(
+            countdown_progress(Duration::from_secs(60), Duration::from_secs(90)),
+            0.0
+        );
+    }
 }
