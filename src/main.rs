@@ -1,8 +1,7 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 use std::{
-    fs,
-    io,
+    fs, io,
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -41,10 +40,7 @@ enum Lang {
 impl Lang {
     fn message(self) -> (&'static str, &'static str) {
         match self {
-            Lang::Zh => (
-                "该眨眼啦",
-                "遵循 20-20-20 规则：看 6 米外 20 秒。",
-            ),
+            Lang::Zh => ("该眨眼啦", "遵循 20-20-20 规则：看 6 米外 20 秒。"),
             Lang::En => (
                 "Time to blink",
                 "Follow the 20-20-20 rule: look 20 feet away for 20 seconds.",
@@ -119,6 +115,7 @@ struct CountdownApp {
     position_path: PathBuf,
     last_saved_position: Option<egui::Pos2>,
     last_position_save_at: Option<Instant>,
+    last_visibility_recover_at: Option<Instant>,
     last_error: Option<String>,
     last_position_error: Option<String>,
     finished: bool,
@@ -135,6 +132,7 @@ impl CountdownApp {
             position_path: window_position_file(),
             last_saved_position: initial_saved_position,
             last_position_save_at: None,
+            last_visibility_recover_at: None,
             last_error: None,
             last_position_error: None,
             finished: false,
@@ -200,10 +198,49 @@ impl CountdownApp {
             }
         }
     }
+
+    fn ensure_window_visible(&mut self, ctx: &egui::Context) {
+        let Some(visible_rect) = platform_visible_rect() else {
+            return;
+        };
+
+        let Some(window_rect) = ctx.input(|i| i.viewport().outer_rect) else {
+            return;
+        };
+
+        // If any part of the window is still visible, keep the user's current placement.
+        if window_rect.intersects(visible_rect) {
+            return;
+        }
+
+        let recover_too_soon = self
+            .last_visibility_recover_at
+            .is_some_and(|last| last.elapsed() < Duration::from_secs(1));
+        if recover_too_soon {
+            return;
+        }
+
+        let corrected = clamp_window_position(window_rect.min, window_rect.size());
+        if !position_changed(window_rect.min, corrected) {
+            return;
+        }
+
+        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(corrected));
+        self.last_visibility_recover_at = Some(Instant::now());
+        self.last_saved_position = Some(corrected);
+        self.last_position_save_at = Some(Instant::now());
+
+        if let Err(err) = save_window_position(&self.position_path, corrected) {
+            self.last_position_error = Some(err.to_string());
+        } else {
+            self.last_position_error = None;
+        }
+    }
 }
 
 impl eframe::App for CountdownApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.ensure_window_visible(ctx);
         self.maybe_persist_window_position(ctx, false);
 
         if ctx.input(|i| i.viewport().close_requested()) {
@@ -251,7 +288,10 @@ impl eframe::App for CountdownApp {
 
                 egui::Frame::default()
                     .fill(egui::Color32::from_rgb(252, 254, 255))
-                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(221, 231, 240)))
+                    .stroke(egui::Stroke::new(
+                        1.0,
+                        egui::Color32::from_rgb(221, 231, 240),
+                    ))
                     .corner_radius(egui::CornerRadius::same(16))
                     .inner_margin(egui::Margin::same(14))
                     .show(ui, |ui| {
@@ -387,15 +427,62 @@ fn initial_window_pos(size: egui::Vec2) -> egui::Pos2 {
     let screen_height = unsafe { GetSystemMetrics(SM_CYSCREEN) as f32 };
     let margin = 16.0_f32;
 
-    egui::pos2(
-        (screen_width - size.x - margin).max(0.0),
-        (screen_height - size.y - margin).max(0.0),
+    clamp_window_position(
+        egui::pos2(
+            (screen_width - size.x - margin).max(0.0),
+            (screen_height - size.y - margin).max(0.0),
+        ),
+        size,
     )
 }
 
 #[cfg(not(target_os = "windows"))]
 fn initial_window_pos(_size: egui::Vec2) -> egui::Pos2 {
     egui::pos2(16.0, 16.0)
+}
+
+#[cfg(target_os = "windows")]
+fn platform_visible_rect() -> Option<egui::Rect> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+        SM_YVIRTUALSCREEN,
+    };
+
+    // SAFETY: GetSystemMetrics is thread-safe and requires no pointers.
+    let x = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) as f32 };
+    // SAFETY: GetSystemMetrics is thread-safe and requires no pointers.
+    let y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) as f32 };
+    // SAFETY: GetSystemMetrics is thread-safe and requires no pointers.
+    let width = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) as f32 };
+    // SAFETY: GetSystemMetrics is thread-safe and requires no pointers.
+    let height = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) as f32 };
+
+    if width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+
+    Some(egui::Rect::from_min_size(
+        egui::pos2(x, y),
+        egui::vec2(width, height),
+    ))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn platform_visible_rect() -> Option<egui::Rect> {
+    None
+}
+
+fn clamp_window_position(pos: egui::Pos2, window_size: egui::Vec2) -> egui::Pos2 {
+    let Some(bounds) = platform_visible_rect() else {
+        return pos;
+    };
+
+    let min_x = bounds.min.x;
+    let min_y = bounds.min.y;
+    let max_x = (bounds.max.x - window_size.x).max(min_x);
+    let max_y = (bounds.max.y - window_size.y).max(min_y);
+
+    egui::pos2(pos.x.clamp(min_x, max_x), pos.y.clamp(min_y, max_y))
 }
 
 fn position_changed(last: egui::Pos2, current: egui::Pos2) -> bool {
@@ -523,7 +610,8 @@ fn main() -> eframe::Result {
     }
 
     let window_size = egui::vec2(420.0, 290.0);
-    let saved_position = load_saved_window_position();
+    let saved_position =
+        load_saved_window_position().map(|pos| clamp_window_position(pos, window_size));
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("BlinkSpark")
         .with_inner_size(window_size)
