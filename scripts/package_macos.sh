@@ -14,8 +14,13 @@ if ! command -v rustup >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v xcodebuild >/dev/null 2>&1; then
-  echo "[ERROR] Missing Xcode Command Line Tools. Run: xcode-select --install" >&2
+if ! command -v clang >/dev/null 2>&1; then
+  echo "[ERROR] Missing Apple clang (Xcode Command Line Tools). Run: xcode-select --install" >&2
+  exit 1
+fi
+
+if ! command -v iconutil >/dev/null 2>&1; then
+  echo "[ERROR] Missing iconutil (Xcode Command Line Tools). Run: xcode-select --install" >&2
   exit 1
 fi
 

@@ -13,7 +13,7 @@ xcode-select --install
 检查：
 
 ```bash
-xcodebuild -version
+clang --version
 sips --version
 iconutil --help >/dev/null && echo "iconutil ok"
 ```
