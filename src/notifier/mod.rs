@@ -12,7 +12,21 @@ mod platform {
 
 #[cfg(target_os = "macos")]
 mod platform {
+    use std::sync::OnceLock;
+
+    const APP_BUNDLE_ID: &str = "io.github.shuyixiao.blinkspark";
+    static APP_BIND_RESULT: OnceLock<Result<(), String>> = OnceLock::new();
+
+    fn ensure_notification_application() -> Result<(), String> {
+        APP_BIND_RESULT
+            .get_or_init(|| {
+                mac_notification_sys::set_application(APP_BUNDLE_ID).map_err(|err| err.to_string())
+            })
+            .clone()
+    }
+
     pub fn notify(title: &str, body: &str) -> Result<(), String> {
+        ensure_notification_application()?;
         mac_notification_sys::send_notification(title, None, body, None)
             .map(|_| ())
             .map_err(|err| err.to_string())
