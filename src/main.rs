@@ -547,28 +547,80 @@ fn load_app_icon() -> Option<egui::IconData> {
 }
 
 #[cfg(target_os = "windows")]
-fn load_windows_cjk_font_bytes() -> Option<Vec<u8>> {
+fn load_platform_cjk_font_data() -> Option<egui::FontData> {
     let candidates = [
-        r"C:\Windows\Fonts\NotoSansSC-VF.ttf",
-        r"C:\Windows\Fonts\simhei.ttf",
-        r"C:\Windows\Fonts\simsunb.ttf",
+        (r"C:\Windows\Fonts\NotoSansSC-VF.ttf", 0_u32),
+        (r"C:\Windows\Fonts\msyh.ttc", 0_u32),
+        (r"C:\Windows\Fonts\msyh.ttc", 1_u32),
+        (r"C:\Windows\Fonts\simhei.ttf", 0_u32),
+        (r"C:\Windows\Fonts\simsun.ttc", 0_u32),
+        (r"C:\Windows\Fonts\simsunb.ttf", 0_u32),
     ];
 
-    candidates.iter().find_map(|path| fs::read(path).ok())
+    for (path, index) in candidates {
+        if let Ok(font_bytes) = fs::read(path) {
+            let mut font_data = egui::FontData::from_owned(font_bytes);
+            font_data.index = index;
+            return Some(font_data);
+        }
+    }
+    None
 }
 
-#[cfg(not(target_os = "windows"))]
-fn load_windows_cjk_font_bytes() -> Option<Vec<u8>> {
+#[cfg(target_os = "macos")]
+fn load_platform_cjk_font_data() -> Option<egui::FontData> {
+    let candidates = [
+        ("/System/Library/Fonts/Hiragino Sans GB.ttc", 0_u32),
+        ("/System/Library/Fonts/STHeiti Light.ttc", 0_u32),
+        ("/System/Library/Fonts/STHeiti Medium.ttc", 0_u32),
+        ("/System/Library/Fonts/Supplemental/Songti.ttc", 0_u32),
+        ("/System/Library/Fonts/CJKSymbolsFallback.ttc", 0_u32),
+        ("/Library/Fonts/Arial Unicode.ttf", 0_u32),
+    ];
+
+    for (path, index) in candidates {
+        if let Ok(font_bytes) = fs::read(path) {
+            let mut font_data = egui::FontData::from_owned(font_bytes);
+            font_data.index = index;
+            return Some(font_data);
+        }
+    }
+
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn load_platform_cjk_font_data() -> Option<egui::FontData> {
+    let candidates = [
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0_u32),
+        ("/usr/share/fonts/opentype/noto/NotoSansCJKSC-Regular.otf", 0_u32),
+        ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", 0_u32),
+        ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 0_u32),
+    ];
+
+    for (path, index) in candidates {
+        if let Ok(font_bytes) = fs::read(path) {
+            let mut font_data = egui::FontData::from_owned(font_bytes);
+            font_data.index = index;
+            return Some(font_data);
+        }
+    }
+
+    None
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+fn load_platform_cjk_font_data() -> Option<egui::FontData> {
     None
 }
 
 fn configure_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
 
-    if let Some(font_bytes) = load_windows_cjk_font_bytes() {
+    if let Some(font_data) = load_platform_cjk_font_data() {
         fonts.font_data.insert(
             "cjk".to_string(),
-            std::sync::Arc::new(egui::FontData::from_owned(font_bytes)),
+            std::sync::Arc::new(font_data),
         );
 
         if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
