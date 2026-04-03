@@ -12,3 +12,5 @@
 .idea/
 /target
 Cargo.lock
+assets/branding/generated/blinkspark.icns
+assets/branding/generated/blinkspark.iconset/

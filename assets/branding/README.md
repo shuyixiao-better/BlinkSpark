@@ -27,6 +27,18 @@ Generated files:
 - `assets/branding/generated/blinkspark.ico`
 - `assets/branding/blinkspark.ico` (copied automatically for build pipeline)
 
+## Generate macOS ICNS
+
+Run in project root:
+
+```bash
+./scripts/generate_macos_icon.sh
+```
+
+Generated file:
+
+- `assets/branding/generated/blinkspark.icns`
+
 ## Design Rationale
 
 - Eye shape: communicates blink/eye-care directly.

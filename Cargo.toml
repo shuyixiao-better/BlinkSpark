@@ -5,6 +5,15 @@ edition = "2021"
 description = "Cross-platform 20-20-20 blink reminder"
 license = "MIT"
 
+[package.metadata.bundle]
+name = "BlinkSpark"
+identifier = "io.github.shuyixiao.blinkspark"
+icon = ["assets/branding/generated/blinkspark.icns"]
+short_description = "20-20-20 blink reminder"
+long_description = "BlinkSpark is a lightweight desktop reminder for following the 20-20-20 eye-care rule."
+category = "public.app-category.productivity"
+osx_minimum_system_version = "11.0"
+
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 eframe = "0.33.3"

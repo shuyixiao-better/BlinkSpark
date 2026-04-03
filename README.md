@@ -53,6 +53,11 @@ cargo build --release
 
 生成的可执行文件在 `target/release/blinkspark`。
 
+## 平台打包文档
+
+- Windows: `WINDOWS_BUILD_CN.md`
+- macOS: `MACOS_BUILD_CN.md`
+
 ## 适合人群
 - 长时间写代码、看文档、回消息的开发者
 - 需要稳定专注又容易忽略休息的知识工作者
