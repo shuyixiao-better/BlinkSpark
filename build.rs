@@ -1,5 +1,3 @@
-use std::path::Path;
-
 fn main() {
     println!("cargo:rerun-if-changed=assets/branding/blinkspark.ico");
     println!("cargo:rerun-if-changed=assets/branding/generated/blinkspark.ico");
@@ -11,6 +9,8 @@ fn main() {
 
     #[cfg(windows)]
     {
+        use std::path::Path;
+
         let icon_path = if Path::new("assets/branding/blinkspark.ico").exists() {
             "assets/branding/blinkspark.ico"
         } else if Path::new("assets/branding/generated/blinkspark.ico").exists() {

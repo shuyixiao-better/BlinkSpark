@@ -82,7 +82,7 @@ sudo cp -R target/*/release/bundle/osx/BlinkSpark.app /Applications/
 cd /Users/shuyixiao/RustroverProjects/BlinkSpark
 ./scripts/generate_macos_icon.sh
 rustup target add "$(uname -m | sed 's/arm64/aarch64-apple-darwin/;s/x86_64/x86_64-apple-darwin/')"
-cargo bundle --release --format app
+cargo bundle --release --format osx
 ```
 
 ## 5. 首次运行与权限
@@ -113,7 +113,7 @@ source "$HOME/.cargo/env"
 cargo -V
 ```
 
-### 6.2 `xcodebuild` / `iconutil` 不可用
+### 6.2 `clang` / `iconutil` 不可用
 
 说明未安装 Command Line Tools。
 
@@ -129,12 +129,13 @@ xcode-select --install
 xattr -dr com.apple.quarantine /path/to/BlinkSpark.app
 ```
 
-## 7. 可选：生成 DMG
+## 7. 可选：从 `.app` 生成 DMG
 
-如果你需要可分发安装包（`.dmg`）：
+`cargo-bundle v0.9.0` 不支持 `--format dmg`。如果需要 `.dmg`，先按本文生成 `.app`，再用 `hdiutil` 打包：
 
 ```bash
-cargo bundle --release --format dmg
+APP_PATH="target/$(uname -m | sed 's/arm64/aarch64-apple-darwin/;s/x86_64/x86_64-apple-darwin/')/release/bundle/osx/BlinkSpark.app"
+mkdir -p dist
+cp -R "$APP_PATH" dist/
+hdiutil create -volname "BlinkSpark" -srcfolder dist -ov -format UDZO dist/BlinkSpark.dmg
 ```
-
-默认输出在 `target/.../release/bundle/dmg/` 目录。

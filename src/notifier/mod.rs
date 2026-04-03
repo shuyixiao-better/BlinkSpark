@@ -13,7 +13,8 @@ mod platform {
 #[cfg(target_os = "macos")]
 mod platform {
     pub fn notify(title: &str, body: &str) -> Result<(), String> {
-        mac_notification_sys::send_notification(title, None, Some(body), None, None)
+        mac_notification_sys::send_notification(title, None, body, None)
+            .map(|_| ())
             .map_err(|err| err.to_string())
     }
 }

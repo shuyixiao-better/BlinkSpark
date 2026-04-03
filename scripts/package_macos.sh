@@ -48,7 +48,7 @@ esac
 rustup target add "$TARGET"
 
 pushd "$ROOT_DIR" >/dev/null
-cargo bundle --release --target "$TARGET" --format app
+cargo bundle --release --target "$TARGET" --format osx
 popd >/dev/null
 
 APP_PATH="$ROOT_DIR/target/$TARGET/release/bundle/osx/BlinkSpark.app"
