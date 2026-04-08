@@ -19,7 +19,8 @@ const CARD_PADDING: i8 = 18;
 const CARD_RADIUS: u8 = 20;
 const CONTROL_RADIUS: u8 = 14;
 const CONTROL_HEIGHT: f32 = 30.0;
-const RESET_BUTTON_WIDTH: f32 = 132.0;
+const RESET_BUTTON_WIDTH: f32 = 156.0;
+const TOGGLE_ACTION_GAP: f32 = 24.0;
 const PROGRESS_HEIGHT: f32 = 16.0;
 const PROGRESS_ANIMATION_SECONDS: f32 = 0.5;
 
@@ -34,6 +35,7 @@ const COLOR_TITLE: (u8, u8, u8) = (37, 52, 63);
 const COLOR_TEXT_MUTED: (u8, u8, u8) = (97, 112, 129);
 const COLOR_TEXT_HINT: (u8, u8, u8) = (117, 130, 146);
 const COLOR_ERROR: (u8, u8, u8) = (195, 56, 56);
+const COLOR_WHITE: (u8, u8, u8) = (255, 255, 255);
 
 fn rgb((r, g, b): (u8, u8, u8)) -> egui::Color32 {
     egui::Color32::from_rgb(r, g, b)
@@ -117,6 +119,7 @@ impl Lang {
         }
     }
 
+    #[allow(dead_code)]
     fn reset_button_label(self) -> &'static str {
         match self {
             Lang::Zh => "重置计时",
@@ -375,15 +378,22 @@ impl eframe::App for CountdownApp {
                                 });
 
                             ui.add_space(SPACE_SM);
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    egui::RichText::new(self.lang.language_label())
-                                        .size(13.0)
-                                        .color(rgb(COLOR_TEXT_MUTED)),
-                                );
-                                ui.add_space(SPACE_XS);
-                                segmented_language_control(ui, &mut self.lang);
-                            });
+                            ui.with_layout(
+                                egui::Layout::left_to_right(egui::Align::Center),
+                                |ui| {
+                                    ui.label(
+                                        egui::RichText::new(self.lang.language_label())
+                                            .size(13.0)
+                                            .color(rgb(COLOR_TEXT_MUTED)),
+                                    );
+                                    ui.add_space(SPACE_XS);
+                                    segmented_language_control(ui, &mut self.lang);
+                                    ui.add_space(TOGGLE_ACTION_GAP);
+                                    if primary_reset_button(ui).clicked() {
+                                        self.reset_timer();
+                                    }
+                                },
+                            );
 
                             if let Some(err) = &self.last_error {
                                 ui.add_space(SPACE_SM);
@@ -409,15 +419,6 @@ impl eframe::App for CountdownApp {
                                         .color(rgb(COLOR_TEXT_HINT)),
                                 )
                                 .truncate(),
-                            );
-                            ui.add_space(SPACE_SM);
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    if ghost_button(ui, self.lang.reset_button_label()).clicked() {
-                                        self.reset_timer();
-                                    }
-                                },
                             );
                         });
                     });
@@ -603,23 +604,24 @@ fn segmented_language_item(ui: &mut egui::Ui, lang: &mut Lang, choice: Lang, lab
     }
 }
 
-fn ghost_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
+fn primary_reset_button(ui: &mut egui::Ui) -> egui::Response {
+    let corner = egui::CornerRadius::same((CONTROL_HEIGHT / 2.0).round() as u8);
     ui.scope(|ui| {
         let visuals = ui.visuals_mut();
-        visuals.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
-        visuals.widgets.inactive.bg_stroke =
-            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 13));
-        visuals.widgets.hovered.bg_fill = rgba(COLOR_PRIMARY, 38);
-        visuals.widgets.hovered.bg_stroke =
-            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 22));
-        visuals.widgets.active.bg_fill = rgba(COLOR_PRIMARY, 52);
-        visuals.widgets.active.bg_stroke =
-            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 28));
+        visuals.widgets.hovered.bg_fill = rgb(COLOR_PRIMARY_GRADIENT_END);
+        visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, rgb(COLOR_PRIMARY_GRADIENT_END));
+        visuals.widgets.active.bg_fill = rgb(COLOR_PRIMARY_GRADIENT_END);
+        visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, rgb(COLOR_PRIMARY_GRADIENT_END));
 
-        ui.add_sized(
-            [RESET_BUTTON_WIDTH, CONTROL_HEIGHT],
-            egui::Button::new(label).corner_radius(egui::CornerRadius::same(CARD_RADIUS)),
-        )
+        let label = egui::RichText::new("↻ 重置计时")
+            .size(13.0)
+            .strong()
+            .color(rgb(COLOR_WHITE));
+        let button = egui::Button::new(label)
+            .fill(rgb(COLOR_PRIMARY))
+            .stroke(egui::Stroke::new(1.0, rgb(COLOR_PRIMARY)))
+            .corner_radius(corner);
+        ui.add_sized([RESET_BUTTON_WIDTH, CONTROL_HEIGHT], button)
     })
     .inner
 }
