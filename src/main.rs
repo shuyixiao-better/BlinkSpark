@@ -11,6 +11,38 @@ use eframe::egui;
 
 mod notifier;
 
+const WINDOW_SIZE: egui::Vec2 = egui::vec2(420.0, 290.0);
+const WINDOW_MIN_SIZE: egui::Vec2 = egui::vec2(380.0, 270.0);
+
+const PANEL_PADDING: i8 = 20;
+const CARD_PADDING: i8 = 18;
+const CARD_RADIUS: u8 = 20;
+const CONTROL_RADIUS: u8 = 14;
+const CONTROL_HEIGHT: f32 = 30.0;
+const RESET_BUTTON_WIDTH: f32 = 132.0;
+const PROGRESS_HEIGHT: f32 = 16.0;
+const PROGRESS_ANIMATION_SECONDS: f32 = 0.5;
+
+const SPACE_XS: f32 = 4.0;
+const SPACE_SM: f32 = 8.0;
+const FOOTER_HEIGHT: f32 = 52.0;
+
+const COLOR_BACKGROUND: (u8, u8, u8) = (245, 247, 250);
+const COLOR_PRIMARY: (u8, u8, u8) = (142, 182, 155);
+const COLOR_PRIMARY_GRADIENT_END: (u8, u8, u8) = (114, 159, 128);
+const COLOR_TITLE: (u8, u8, u8) = (37, 52, 63);
+const COLOR_TEXT_MUTED: (u8, u8, u8) = (97, 112, 129);
+const COLOR_TEXT_HINT: (u8, u8, u8) = (117, 130, 146);
+const COLOR_ERROR: (u8, u8, u8) = (195, 56, 56);
+
+fn rgb((r, g, b): (u8, u8, u8)) -> egui::Color32 {
+    egui::Color32::from_rgb(r, g, b)
+}
+
+fn rgba((r, g, b): (u8, u8, u8), alpha: u8) -> egui::Color32 {
+    egui::Color32::from_rgba_unmultiplied(r, g, b, alpha)
+}
+
 #[derive(Parser, Debug, Clone, Copy)]
 #[command(name = "blinkspark", version, about = "20-20-20 blink reminder")]
 struct Args {
@@ -118,6 +150,7 @@ struct CountdownApp {
     last_visibility_recover_at: Option<Instant>,
     last_error: Option<String>,
     last_position_error: Option<String>,
+    displayed_progress: f32,
     finished: bool,
 }
 
@@ -135,6 +168,7 @@ impl CountdownApp {
             last_visibility_recover_at: None,
             last_error: None,
             last_position_error: None,
+            displayed_progress: 1.0,
             finished: false,
         }
     }
@@ -254,129 +288,139 @@ impl eframe::App for CountdownApp {
         }
 
         self.try_send_notification();
-        ctx.request_repaint_after(Duration::from_millis(200));
-
         let remaining = self.next_deadline.saturating_duration_since(Instant::now());
-        let progress = countdown_progress(self.interval, remaining);
-        let accent = progress_accent_color(1.0 - progress);
+        let target_progress = countdown_progress(self.interval, remaining);
+        let dt = ctx.input(|i| i.stable_dt.max(1.0 / 240.0));
+        self.displayed_progress = animate_value(
+            self.displayed_progress,
+            target_progress,
+            dt,
+            PROGRESS_ANIMATION_SECONDS,
+        );
+
+        let animating = (self.displayed_progress - target_progress).abs() > 0.001;
+        ctx.request_repaint_after(if animating {
+            Duration::from_millis(16)
+        } else {
+            Duration::from_millis(120)
+        });
 
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::default()
-                    .fill(egui::Color32::from_rgb(240, 245, 250))
-                    .inner_margin(egui::Margin::same(16)),
+                    .fill(egui::Color32::TRANSPARENT)
+                    .inner_margin(egui::Margin::same(PANEL_PADDING)),
             )
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new(self.lang.window_title())
-                            .size(25.0)
-                            .strong()
-                            .color(egui::Color32::from_rgb(25, 52, 77)),
-                    );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(
-                            egui::RichText::new(self.lang.mode_label(self.once_mode))
-                                .size(13.0)
-                                .color(egui::Color32::from_rgb(90, 107, 126)),
-                        );
-                    });
-                });
-                ui.add_space(6.0);
-                ui.separator();
-                ui.add_space(4.0);
+                paint_glass_background(ui);
 
                 egui::Frame::default()
-                    .fill(egui::Color32::from_rgb(252, 254, 255))
+                    .fill(rgba(COLOR_BACKGROUND, 220))
                     .stroke(egui::Stroke::new(
                         1.0,
-                        egui::Color32::from_rgb(221, 231, 240),
+                        egui::Color32::from_rgba_unmultiplied(0, 0, 0, 13),
                     ))
-                    .corner_radius(egui::CornerRadius::same(16))
-                    .inner_margin(egui::Margin::same(14))
+                    .corner_radius(egui::CornerRadius::same(CARD_RADIUS))
+                    .inner_margin(egui::Margin::same(CARD_PADDING))
                     .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(self.lang.countdown_label())
-                                .size(14.0)
-                                .color(egui::Color32::from_rgb(104, 119, 136)),
-                        );
-                        ui.add_space(2.0);
-                        ui.label(
-                            egui::RichText::new(format_countdown(remaining))
-                                .size(48.0)
-                                .monospace()
-                                .strong()
-                                .color(egui::Color32::from_rgb(28, 44, 62)),
-                        );
-                        ui.add_space(8.0);
-                        ui.add(
-                            egui::ProgressBar::new(progress)
-                                .desired_height(16.0)
-                                .corner_radius(egui::CornerRadius::same(8))
-                                .fill(accent),
-                        );
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    egui::RichText::new(letter_spaced_title(
+                                        self.lang.window_title(),
+                                    ))
+                                    .size(24.0)
+                                    .color(rgb(COLOR_TITLE)),
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        ui.label(
+                                            egui::RichText::new(
+                                                self.lang.mode_label(self.once_mode),
+                                            )
+                                            .size(13.0)
+                                            .color(rgb(COLOR_TEXT_MUTED)),
+                                        );
+                                    },
+                                );
+                            });
+                            ui.add_space(SPACE_XS);
+                            ui.separator();
+                            ui.add_space(SPACE_SM);
+
+                            egui::Frame::default()
+                                .fill(rgba((255, 255, 255), 170))
+                                .stroke(egui::Stroke::new(
+                                    1.0,
+                                    egui::Color32::from_rgba_unmultiplied(0, 0, 0, 13),
+                                ))
+                                .corner_radius(egui::CornerRadius::same(CARD_RADIUS))
+                                .inner_margin(egui::Margin::same(CARD_PADDING))
+                                .show(ui, |ui| {
+                                    ui.label(
+                                        egui::RichText::new(self.lang.countdown_label())
+                                            .size(14.0)
+                                            .color(rgb(COLOR_TEXT_MUTED)),
+                                    );
+                                    ui.add_space(SPACE_XS);
+                                    ui.label(
+                                        egui::RichText::new(format_countdown(remaining))
+                                            .size(48.0)
+                                            .monospace()
+                                            .color(rgb(COLOR_TITLE)),
+                                    );
+                                    ui.add_space(SPACE_SM);
+                                    draw_gradient_progress_bar(ui, self.displayed_progress);
+                                });
+
+                            ui.add_space(SPACE_SM);
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    egui::RichText::new(self.lang.language_label())
+                                        .size(13.0)
+                                        .color(rgb(COLOR_TEXT_MUTED)),
+                                );
+                                ui.add_space(SPACE_XS);
+                                segmented_language_control(ui, &mut self.lang);
+                            });
+
+                            if let Some(err) = &self.last_error {
+                                ui.add_space(SPACE_SM);
+                                ui.colored_label(
+                                    rgb(COLOR_ERROR),
+                                    format!("{} {}", self.lang.notify_error_prefix(), err),
+                                );
+                            }
+
+                            if let Some(err) = &self.last_position_error {
+                                ui.add_space(SPACE_SM);
+                                ui.colored_label(
+                                    rgb(COLOR_ERROR),
+                                    format!("{} {}", self.lang.position_error_prefix(), err),
+                                );
+                            }
+
+                            ui.add_space(footer_spacer(ui.available_height(), FOOTER_HEIGHT));
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(self.lang.drag_hint())
+                                        .size(12.0)
+                                        .color(rgb(COLOR_TEXT_HINT)),
+                                )
+                                .truncate(),
+                            );
+                            ui.add_space(SPACE_SM);
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ghost_button(ui, self.lang.reset_button_label()).clicked() {
+                                        self.reset_timer();
+                                    }
+                                },
+                            );
+                        });
                     });
-
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new(self.lang.language_label())
-                            .size(13.0)
-                            .color(egui::Color32::from_rgb(97, 112, 129)),
-                    );
-
-                    if ui
-                        .add(egui::Button::new("EN").selected(self.lang == Lang::En))
-                        .clicked()
-                    {
-                        self.lang = Lang::En;
-                    }
-                    if ui
-                        .add(egui::Button::new("ZH").selected(self.lang == Lang::Zh))
-                        .clicked()
-                    {
-                        self.lang = Lang::Zh;
-                    }
-                });
-
-                if let Some(err) = &self.last_error {
-                    ui.add_space(6.0);
-                    ui.colored_label(
-                        egui::Color32::from_rgb(195, 56, 56),
-                        format!("{} {}", self.lang.notify_error_prefix(), err),
-                    );
-                }
-
-                if let Some(err) = &self.last_position_error {
-                    ui.add_space(6.0);
-                    ui.colored_label(
-                        egui::Color32::from_rgb(195, 56, 56),
-                        format!("{} {}", self.lang.position_error_prefix(), err),
-                    );
-                }
-
-                const FOOTER_HEIGHT: f32 = 52.0;
-                ui.add_space(footer_spacer(ui.available_height(), FOOTER_HEIGHT));
-                ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(self.lang.drag_hint())
-                            .size(12.0)
-                            .color(egui::Color32::from_rgb(117, 130, 146)),
-                    )
-                    .truncate(),
-                );
-                ui.add_space(6.0);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .add_sized(
-                            [132.0, 28.0],
-                            egui::Button::new(self.lang.reset_button_label()),
-                        )
-                        .clicked()
-                    {
-                        self.reset_timer();
-                    }
-                });
             });
     }
 }
@@ -409,13 +453,175 @@ fn lerp_u8(from: u8, to: u8, t: f32) -> u8 {
     (from as f32 + (to as f32 - from as f32) * t).round() as u8
 }
 
-fn progress_accent_color(progress: f32) -> egui::Color32 {
-    let t = progress.clamp(0.0, 1.0);
-    egui::Color32::from_rgb(
-        lerp_u8(33, 240, t),
-        lerp_u8(133, 134, t),
-        lerp_u8(94, 64, t),
+fn lerp_color(from: egui::Color32, to: egui::Color32, t: f32) -> egui::Color32 {
+    let t = t.clamp(0.0, 1.0);
+    egui::Color32::from_rgba_unmultiplied(
+        lerp_u8(from.r(), to.r(), t),
+        lerp_u8(from.g(), to.g(), t),
+        lerp_u8(from.b(), to.b(), t),
+        lerp_u8(from.a(), to.a(), t),
     )
+}
+
+fn ease_in_out_cubic(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    if t < 0.5 {
+        4.0 * t * t * t
+    } else {
+        1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
+    }
+}
+
+fn animate_value(current: f32, target: f32, dt_seconds: f32, duration_seconds: f32) -> f32 {
+    let delta = (target - current).abs();
+    if delta <= 0.0001 {
+        return target;
+    }
+
+    let step = (dt_seconds / duration_seconds.max(0.0001)).clamp(0.0, 1.0);
+    current + (target - current) * ease_in_out_cubic(step)
+}
+
+fn letter_spaced_title(title: &str) -> String {
+    let mut result = String::with_capacity(title.len() * 2);
+    let mut chars = title.chars().peekable();
+
+    while let Some(current) = chars.next() {
+        result.push(current);
+        if let Some(next) = chars.peek() {
+            if current != ' ' && *next != ' ' {
+                result.push(' ');
+            }
+        }
+    }
+
+    result
+}
+
+fn paint_glass_background(ui: &mut egui::Ui) {
+    let rect = ui.max_rect();
+    let painter = ui.painter();
+
+    painter.rect_filled(
+        rect,
+        egui::CornerRadius::same(CARD_RADIUS),
+        rgb(COLOR_BACKGROUND),
+    );
+    painter.circle_filled(
+        rect.left_top() + egui::vec2(rect.width() * 0.28, rect.height() * 0.20),
+        rect.width() * 0.42,
+        rgba(COLOR_PRIMARY, 28),
+    );
+    painter.circle_filled(
+        rect.right_bottom() - egui::vec2(rect.width() * 0.20, rect.height() * 0.18),
+        rect.width() * 0.38,
+        rgba((255, 255, 255), 130),
+    );
+}
+
+fn draw_gradient_progress_bar(ui: &mut egui::Ui, progress: f32) {
+    let (track_rect, _) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), PROGRESS_HEIGHT),
+        egui::Sense::hover(),
+    );
+
+    let radius = egui::CornerRadius::same((PROGRESS_HEIGHT / 2.0).round() as u8);
+    let track_color = rgba((255, 255, 255), 150);
+    ui.painter().rect_filled(track_rect, radius, track_color);
+    ui.painter().rect_stroke(
+        track_rect,
+        radius,
+        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 13)),
+        egui::StrokeKind::Inside,
+    );
+
+    let fill_width = track_rect.width() * progress.clamp(0.0, 1.0);
+    if fill_width <= 0.0 {
+        return;
+    }
+
+    let fill_rect =
+        egui::Rect::from_min_size(track_rect.min, egui::vec2(fill_width, track_rect.height()));
+    let fill_radius =
+        egui::CornerRadius::same((fill_width.min(PROGRESS_HEIGHT) / 2.0).round() as u8);
+    let gradient_start = rgb(COLOR_PRIMARY);
+    let gradient_end = rgb(COLOR_PRIMARY_GRADIENT_END);
+    ui.painter()
+        .rect_filled(fill_rect, fill_radius, gradient_start);
+
+    let steps: usize = 24;
+    for step in 0..steps {
+        let t0 = step as f32 / steps as f32;
+        let t1 = (step + 1) as f32 / steps as f32;
+        let x0 = fill_rect.left() + fill_rect.width() * t0;
+        let x1 = fill_rect.left() + fill_rect.width() * t1;
+        let segment = egui::Rect::from_min_max(
+            egui::pos2(x0, fill_rect.top()),
+            egui::pos2(x1, fill_rect.bottom()),
+        );
+        let color = lerp_color(gradient_start, gradient_end, t0);
+        ui.painter().rect_filled(segment, 0.0, color);
+    }
+}
+
+fn segmented_language_control(ui: &mut egui::Ui, lang: &mut Lang) {
+    egui::Frame::default()
+        .fill(rgba((255, 255, 255), 185))
+        .stroke(egui::Stroke::new(
+            1.0,
+            egui::Color32::from_rgba_unmultiplied(0, 0, 0, 13),
+        ))
+        .corner_radius(egui::CornerRadius::same(CARD_RADIUS))
+        .inner_margin(egui::Margin::symmetric(4, 4))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                segmented_language_item(ui, lang, Lang::En, "EN");
+                segmented_language_item(ui, lang, Lang::Zh, "ZH");
+            });
+        });
+}
+
+fn segmented_language_item(ui: &mut egui::Ui, lang: &mut Lang, choice: Lang, label: &str) {
+    let selected = *lang == choice;
+    let fill = if selected {
+        rgba(COLOR_PRIMARY, 180)
+    } else {
+        egui::Color32::TRANSPARENT
+    };
+    let text_color = if selected {
+        rgb(COLOR_TITLE)
+    } else {
+        rgb(COLOR_TEXT_MUTED)
+    };
+
+    let button = egui::Button::new(egui::RichText::new(label).color(text_color))
+        .fill(fill)
+        .stroke(egui::Stroke::NONE)
+        .corner_radius(egui::CornerRadius::same(CONTROL_RADIUS));
+    if ui.add_sized([44.0, CONTROL_HEIGHT], button).clicked() {
+        *lang = choice;
+    }
+}
+
+fn ghost_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
+    ui.scope(|ui| {
+        let visuals = ui.visuals_mut();
+        visuals.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
+        visuals.widgets.inactive.bg_stroke =
+            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 13));
+        visuals.widgets.hovered.bg_fill = rgba(COLOR_PRIMARY, 38);
+        visuals.widgets.hovered.bg_stroke =
+            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 22));
+        visuals.widgets.active.bg_fill = rgba(COLOR_PRIMARY, 52);
+        visuals.widgets.active.bg_stroke =
+            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 28));
+
+        ui.add_sized(
+            [RESET_BUTTON_WIDTH, CONTROL_HEIGHT],
+            egui::Button::new(label).corner_radius(egui::CornerRadius::same(CARD_RADIUS)),
+        )
+    })
+    .inner
 }
 
 #[cfg(target_os = "windows")]
@@ -592,9 +798,18 @@ fn load_platform_cjk_font_data() -> Option<egui::FontData> {
 #[cfg(target_os = "linux")]
 fn load_platform_cjk_font_data() -> Option<egui::FontData> {
     let candidates = [
-        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0_u32),
-        ("/usr/share/fonts/opentype/noto/NotoSansCJKSC-Regular.otf", 0_u32),
-        ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", 0_u32),
+        (
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            0_u32,
+        ),
+        (
+            "/usr/share/fonts/opentype/noto/NotoSansCJKSC-Regular.otf",
+            0_u32,
+        ),
+        (
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            0_u32,
+        ),
         ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 0_u32),
     ];
 
@@ -618,16 +833,15 @@ fn configure_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
 
     if let Some(font_data) = load_platform_cjk_font_data() {
-        fonts.font_data.insert(
-            "cjk".to_string(),
-            std::sync::Arc::new(font_data),
-        );
+        fonts
+            .font_data
+            .insert("cjk".to_string(), std::sync::Arc::new(font_data));
 
         if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
             family.insert(0, "cjk".to_string());
         }
         if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
-            family.insert(0, "cjk".to_string());
+            family.push("cjk".to_string());
         }
     }
 
@@ -636,18 +850,25 @@ fn configure_fonts(ctx: &egui::Context) {
 
 fn configure_visuals(ctx: &egui::Context) {
     let mut style = (*ctx.style()).clone();
-    style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-    style.spacing.button_padding = egui::vec2(12.0, 6.0);
+    style.spacing.item_spacing = egui::vec2(SPACE_SM, SPACE_SM);
+    style.spacing.button_padding = egui::vec2(14.0, 7.0);
 
     let mut visuals = egui::Visuals::light();
-    visuals.panel_fill = egui::Color32::from_rgb(240, 245, 250);
-    visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(240, 245, 250);
-    visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(232, 238, 245);
-    visuals.widgets.inactive.fg_stroke.color = egui::Color32::from_rgb(40, 64, 89);
-    visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(220, 233, 245);
-    visuals.widgets.active.bg_fill = egui::Color32::from_rgb(206, 224, 241);
-    visuals.selection.bg_fill = egui::Color32::from_rgb(217, 229, 242);
-    visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(62, 95, 126));
+    visuals.panel_fill = egui::Color32::TRANSPARENT;
+    visuals.widgets.noninteractive.bg_fill = rgba(COLOR_BACKGROUND, 180);
+    visuals.widgets.noninteractive.fg_stroke.color = rgb(COLOR_TITLE);
+    visuals.widgets.inactive.bg_fill = rgba((255, 255, 255), 160);
+    visuals.widgets.inactive.bg_stroke =
+        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 13));
+    visuals.widgets.inactive.fg_stroke.color = rgb(COLOR_TITLE);
+    visuals.widgets.hovered.bg_fill = rgba(COLOR_PRIMARY, 46);
+    visuals.widgets.hovered.bg_stroke =
+        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 20));
+    visuals.widgets.active.bg_fill = rgba(COLOR_PRIMARY, 66);
+    visuals.widgets.active.bg_stroke =
+        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 24));
+    visuals.selection.bg_fill = rgba(COLOR_PRIMARY, 92);
+    visuals.selection.stroke = egui::Stroke::new(1.0, rgb(COLOR_PRIMARY_GRADIENT_END));
     style.visuals = visuals;
 
     ctx.set_style(style);
@@ -661,15 +882,15 @@ fn main() -> eframe::Result {
         std::process::exit(2);
     }
 
-    let window_size = egui::vec2(420.0, 290.0);
     let saved_position =
-        load_saved_window_position().map(|pos| clamp_window_position(pos, window_size));
+        load_saved_window_position().map(|pos| clamp_window_position(pos, WINDOW_SIZE));
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("BlinkSpark")
-        .with_inner_size(window_size)
-        .with_min_inner_size(egui::vec2(380.0, 270.0))
-        .with_position(saved_position.unwrap_or_else(|| initial_window_pos(window_size)))
-        .with_resizable(true);
+        .with_inner_size(WINDOW_SIZE)
+        .with_min_inner_size(WINDOW_MIN_SIZE)
+        .with_position(saved_position.unwrap_or_else(|| initial_window_pos(WINDOW_SIZE)))
+        .with_resizable(true)
+        .with_transparent(true);
 
     if let Some(icon) = load_app_icon() {
         viewport = viewport.with_icon(icon);
