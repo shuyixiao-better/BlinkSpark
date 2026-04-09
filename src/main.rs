@@ -200,6 +200,7 @@ impl CountdownApp {
 
     fn reset_timer(&mut self) {
         self.next_deadline = Instant::now() + self.interval;
+        self.displayed_progress = 1.0;
     }
 
     fn maybe_persist_window_position(&mut self, ctx: &egui::Context, force: bool) {
@@ -957,5 +958,21 @@ mod tests {
     fn footer_spacer_never_negative() {
         assert_eq!(footer_spacer(60.0, 52.0), 8.0);
         assert_eq!(footer_spacer(20.0, 52.0), 0.0);
+    }
+
+    #[test]
+    fn reset_timer_restores_progress_to_full() {
+        let args = Args {
+            lang: Lang::Zh,
+            interval: 20,
+            once: false,
+            repeat: false,
+        };
+        let mut app = CountdownApp::new(args, None);
+        app.displayed_progress = 0.37;
+
+        app.reset_timer();
+
+        assert_eq!(app.displayed_progress, 1.0);
     }
 }
