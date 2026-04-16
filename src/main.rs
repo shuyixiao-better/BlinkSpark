@@ -192,10 +192,15 @@ impl CountdownApp {
         if self.once_mode {
             self.finished = true;
         } else {
-            while self.next_deadline <= now {
-                self.next_deadline += self.interval;
-            }
+            self.roll_deadline_forward(now);
         }
+    }
+
+    fn roll_deadline_forward(&mut self, now: Instant) {
+        while self.next_deadline <= now {
+            self.next_deadline += self.interval;
+        }
+        self.displayed_progress = 1.0;
     }
 
     fn reset_timer(&mut self) {
@@ -974,5 +979,24 @@ mod tests {
         app.reset_timer();
 
         assert_eq!(app.displayed_progress, 1.0);
+    }
+
+    #[test]
+    fn rolling_deadline_forward_restores_progress_to_full() {
+        let args = Args {
+            lang: Lang::En,
+            interval: 20,
+            once: false,
+            repeat: false,
+        };
+        let mut app = CountdownApp::new(args, None);
+        let now = Instant::now();
+        app.next_deadline = now - Duration::from_secs(1);
+        app.displayed_progress = 0.04;
+
+        app.roll_deadline_forward(now);
+
+        assert_eq!(app.displayed_progress, 1.0);
+        assert!(app.next_deadline > now);
     }
 }
