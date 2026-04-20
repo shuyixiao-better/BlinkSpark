@@ -9,6 +9,12 @@ use std::{
 use clap::{Parser, ValueEnum};
 use eframe::egui;
 
+#[cfg(target_os = "windows")]
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    OnceLock,
+};
+
 mod notifier;
 
 const WINDOW_SIZE: egui::Vec2 = egui::vec2(420.0, 290.0);
@@ -20,7 +26,7 @@ const CARD_RADIUS: u8 = 20;
 const CONTROL_RADIUS: u8 = 14;
 const CONTROL_HEIGHT: f32 = 30.0;
 const RESET_BUTTON_WIDTH: f32 = 156.0;
-const TOGGLE_ACTION_GAP: f32 = 24.0;
+const DESKTOP_PIN_BUTTON_WIDTH: f32 = 132.0;
 const PROGRESS_HEIGHT: f32 = 16.0;
 const PROGRESS_ANIMATION_SECONDS: f32 = 0.5;
 
@@ -74,7 +80,10 @@ enum Lang {
 impl Lang {
     fn message(self) -> (&'static str, &'static str) {
         match self {
-            Lang::Zh => ("该眨眼啦", "遵循 20-20-20 规则：看 6 米外 20 秒。"),
+            Lang::Zh => (
+                "\u{8BE5}\u{7728}\u{773C}\u{4E86}",
+                "\u{9075}\u{5FAA} 20-20-20 \u{89C4}\u{5219}\u{FF1A}\u{770B} 6 \u{7C73}\u{5916} 20 \u{79D2}\u{3002}",
+            ),
             Lang::En => (
                 "Time to blink",
                 "Follow the 20-20-20 rule: look 20 feet away for 20 seconds.",
@@ -84,22 +93,22 @@ impl Lang {
 
     fn window_title(self) -> &'static str {
         match self {
-            Lang::Zh => "眨眼提醒",
+            Lang::Zh => "\u{7728}\u{773C}\u{63D0}\u{9192}",
             Lang::En => "Blink Reminder",
         }
     }
 
     fn countdown_label(self) -> &'static str {
         match self {
-            Lang::Zh => "下次提醒倒计时",
+            Lang::Zh => "\u{4E0B}\u{6B21}\u{63D0}\u{9192}\u{5012}\u{8BA1}\u{65F6}",
             Lang::En => "Next reminder in",
         }
     }
 
     fn mode_label(self, once_mode: bool) -> &'static str {
         match (self, once_mode) {
-            (Lang::Zh, true) => "模式：单次提醒",
-            (Lang::Zh, false) => "模式：循环提醒",
+            (Lang::Zh, true) => "\u{6A21}\u{5F0F}\u{FF1A}\u{5355}\u{6B21}\u{63D0}\u{9192}",
+            (Lang::Zh, false) => "\u{6A21}\u{5F0F}\u{FF1A}\u{5FAA}\u{73AF}\u{63D0}\u{9192}",
             (Lang::En, true) => "Mode: once",
             (Lang::En, false) => "Mode: repeat",
         }
@@ -107,37 +116,56 @@ impl Lang {
 
     fn drag_hint(self) -> &'static str {
         match self {
-            Lang::Zh => "可拖动窗口到任意位置",
+            Lang::Zh => {
+                "\u{62D6}\u{52A8}\u{6B64}\u{7A97}\u{53E3}\u{5230}\u{4EFB}\u{610F}\u{4F4D}\u{7F6E}"
+            }
             Lang::En => "Drag this window to place it anywhere",
         }
     }
 
     fn language_label(self) -> &'static str {
         match self {
-            Lang::Zh => "语言",
+            Lang::Zh => "\u{8BED}\u{8A00}",
             Lang::En => "Language",
         }
     }
 
-    #[allow(dead_code)]
     fn reset_button_label(self) -> &'static str {
         match self {
-            Lang::Zh => "重置计时",
+            Lang::Zh => "\u{91CD}\u{7F6E}\u{8BA1}\u{65F6}",
             Lang::En => "Reset timer",
+        }
+    }
+
+    fn pin_button_label(self, pinned: bool) -> &'static str {
+        match (self, pinned) {
+            (Lang::Zh, true) => "\u{53D6}\u{6D88}\u{9489}\u{684C}\u{9762}",
+            (Lang::Zh, false) => "\u{9489}\u{5728}\u{684C}\u{9762}",
+            (Lang::En, true) => "Unpin desktop",
+            (Lang::En, false) => "Pin to desktop",
         }
     }
 
     fn notify_error_prefix(self) -> &'static str {
         match self {
-            Lang::Zh => "通知失败：",
+            Lang::Zh => "\u{901A}\u{77E5}\u{5931}\u{8D25}\u{FF1A}",
             Lang::En => "Notification failed:",
         }
     }
 
     fn position_error_prefix(self) -> &'static str {
         match self {
-            Lang::Zh => "保存窗口位置失败：",
+            Lang::Zh => "\u{4FDD}\u{5B58}\u{7A97}\u{53E3}\u{4F4D}\u{7F6E}\u{5931}\u{8D25}\u{FF1A}",
             Lang::En => "Failed to save window position:",
+        }
+    }
+
+    fn pin_error_prefix(self) -> &'static str {
+        match self {
+            Lang::Zh => {
+                "\u{4FDD}\u{5B58}\u{9489}\u{684C}\u{9762}\u{72B6}\u{6001}\u{5931}\u{8D25}\u{FF1A}"
+            }
+            Lang::En => "Failed to save desktop pin state:",
         }
     }
 }
@@ -148,17 +176,25 @@ struct CountdownApp {
     lang: Lang,
     once_mode: bool,
     position_path: PathBuf,
+    desktop_pin_path: PathBuf,
     last_saved_position: Option<egui::Pos2>,
     last_position_save_at: Option<Instant>,
     last_visibility_recover_at: Option<Instant>,
     last_error: Option<String>,
     last_position_error: Option<String>,
+    pin_to_desktop: bool,
+    last_applied_pin_to_desktop: Option<bool>,
+    last_pin_error: Option<String>,
     displayed_progress: f32,
     finished: bool,
 }
 
 impl CountdownApp {
-    fn new(args: Args, initial_saved_position: Option<egui::Pos2>) -> Self {
+    fn new(
+        args: Args,
+        initial_saved_position: Option<egui::Pos2>,
+        initial_pin_to_desktop: bool,
+    ) -> Self {
         let interval = Duration::from_secs(args.interval.saturating_mul(60));
         Self {
             interval,
@@ -166,11 +202,15 @@ impl CountdownApp {
             lang: args.lang,
             once_mode: args.once && !args.repeat,
             position_path: window_position_file(),
+            desktop_pin_path: desktop_pin_file(),
             last_saved_position: initial_saved_position,
             last_position_save_at: None,
             last_visibility_recover_at: None,
             last_error: None,
             last_position_error: None,
+            pin_to_desktop: initial_pin_to_desktop,
+            last_applied_pin_to_desktop: None,
+            last_pin_error: None,
             displayed_progress: 1.0,
             finished: false,
         }
@@ -206,6 +246,28 @@ impl CountdownApp {
     fn reset_timer(&mut self) {
         self.next_deadline = Instant::now() + self.interval;
         self.displayed_progress = 1.0;
+    }
+
+    fn apply_desktop_pin_mode(&mut self, ctx: &egui::Context) {
+        if self.last_applied_pin_to_desktop == Some(self.pin_to_desktop) {
+            return;
+        }
+
+        let level = if self.pin_to_desktop {
+            egui::WindowLevel::AlwaysOnBottom
+        } else {
+            egui::WindowLevel::Normal
+        };
+        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
+
+        #[cfg(target_os = "windows")]
+        set_windows_desktop_pin_enabled(self.pin_to_desktop);
+
+        self.last_pin_error = match save_desktop_pin(&self.desktop_pin_path, self.pin_to_desktop) {
+            Ok(()) => None,
+            Err(err) => Some(err.to_string()),
+        };
+        self.last_applied_pin_to_desktop = Some(self.pin_to_desktop);
     }
 
     fn maybe_persist_window_position(&mut self, ctx: &egui::Context, force: bool) {
@@ -283,6 +345,7 @@ impl CountdownApp {
 
 impl eframe::App for CountdownApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.apply_desktop_pin_mode(ctx);
         self.ensure_window_visible(ctx);
         self.maybe_persist_window_position(ctx, false);
 
@@ -394,8 +457,29 @@ impl eframe::App for CountdownApp {
                                     );
                                     ui.add_space(SPACE_XS);
                                     segmented_language_control(ui, &mut self.lang);
-                                    ui.add_space(TOGGLE_ACTION_GAP);
-                                    if primary_reset_button(ui).clicked() {
+                                },
+                            );
+
+                            ui.add_space(SPACE_XS);
+                            ui.with_layout(
+                                egui::Layout::left_to_right(egui::Align::Center),
+                                |ui| {
+                                    if desktop_pin_button(
+                                        ui,
+                                        self.lang.pin_button_label(self.pin_to_desktop),
+                                        self.pin_to_desktop,
+                                    )
+                                    .clicked()
+                                    {
+                                        self.pin_to_desktop = !self.pin_to_desktop;
+                                        self.apply_desktop_pin_mode(ctx);
+                                    }
+
+                                    let spacer =
+                                        (ui.available_width() - RESET_BUTTON_WIDTH).max(SPACE_SM);
+                                    ui.add_space(spacer);
+
+                                    if primary_reset_button(ui, self.lang).clicked() {
                                         self.reset_timer();
                                     }
                                 },
@@ -414,6 +498,14 @@ impl eframe::App for CountdownApp {
                                 ui.colored_label(
                                     rgb(COLOR_ERROR),
                                     format!("{} {}", self.lang.position_error_prefix(), err),
+                                );
+                            }
+
+                            if let Some(err) = &self.last_pin_error {
+                                ui.add_space(SPACE_SM);
+                                ui.colored_label(
+                                    rgb(COLOR_ERROR),
+                                    format!("{} {}", self.lang.pin_error_prefix(), err),
                                 );
                             }
 
@@ -610,7 +702,7 @@ fn segmented_language_item(ui: &mut egui::Ui, lang: &mut Lang, choice: Lang, lab
     }
 }
 
-fn primary_reset_button(ui: &mut egui::Ui) -> egui::Response {
+fn primary_reset_button(ui: &mut egui::Ui, lang: Lang) -> egui::Response {
     let corner = egui::CornerRadius::same((CONTROL_HEIGHT / 2.0).round() as u8);
     ui.scope(|ui| {
         let visuals = ui.visuals_mut();
@@ -619,7 +711,7 @@ fn primary_reset_button(ui: &mut egui::Ui) -> egui::Response {
         visuals.widgets.active.bg_fill = rgb(COLOR_PRIMARY_GRADIENT_END);
         visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, rgb(COLOR_PRIMARY_GRADIENT_END));
 
-        let label = egui::RichText::new("↻ 重置计时")
+        let label = egui::RichText::new(format!("\u{21BB} {}", lang.reset_button_label()))
             .size(13.0)
             .strong()
             .color(rgb(COLOR_WHITE));
@@ -630,6 +722,77 @@ fn primary_reset_button(ui: &mut egui::Ui) -> egui::Response {
         ui.add_sized([RESET_BUTTON_WIDTH, CONTROL_HEIGHT], button)
     })
     .inner
+}
+
+fn desktop_pin_button(ui: &mut egui::Ui, label: &str, pinned: bool) -> egui::Response {
+    let corner = egui::CornerRadius::same((CONTROL_HEIGHT / 2.0).round() as u8);
+    let fill = if pinned {
+        rgba(COLOR_PRIMARY, 200)
+    } else {
+        rgba((255, 255, 255), 185)
+    };
+    let stroke = if pinned {
+        egui::Stroke::new(1.0, rgb(COLOR_PRIMARY_GRADIENT_END))
+    } else {
+        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 18))
+    };
+    let text_color = if pinned {
+        rgb(COLOR_TITLE)
+    } else {
+        rgb(COLOR_TEXT_MUTED)
+    };
+
+    let button = egui::Button::new(egui::RichText::new(label).size(13.0).color(text_color))
+        .fill(fill)
+        .stroke(stroke)
+        .corner_radius(corner);
+    ui.add_sized([DESKTOP_PIN_BUTTON_WIDTH, CONTROL_HEIGHT], button)
+}
+
+#[cfg(target_os = "windows")]
+static WINDOWS_DESKTOP_PIN_ENABLED: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "windows")]
+static WINDOWS_DESKTOP_PIN_GUARD: OnceLock<()> = OnceLock::new();
+
+#[cfg(target_os = "windows")]
+fn start_windows_desktop_pin_guard() {
+    WINDOWS_DESKTOP_PIN_GUARD.get_or_init(|| {
+        std::thread::spawn(|| loop {
+            if WINDOWS_DESKTOP_PIN_ENABLED.load(Ordering::Relaxed) {
+                if let Some(hwnd) = find_blinkspark_window() {
+                    use windows_sys::Win32::UI::WindowsAndMessaging::{
+                        IsIconic, ShowWindow, SW_RESTORE,
+                    };
+
+                    // SAFETY: hwnd is returned by FindWindowW and is valid at the point of use.
+                    let minimized = unsafe { IsIconic(hwnd) } != 0;
+                    if minimized {
+                        // SAFETY: Restoring a known top-level window handle is safe.
+                        unsafe { ShowWindow(hwnd, SW_RESTORE) };
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        });
+    });
+}
+
+#[cfg(target_os = "windows")]
+fn set_windows_desktop_pin_enabled(enabled: bool) {
+    WINDOWS_DESKTOP_PIN_ENABLED.store(enabled, Ordering::Relaxed);
+}
+
+#[cfg(target_os = "windows")]
+fn find_blinkspark_window() -> Option<windows_sys::Win32::Foundation::HWND> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::FindWindowW;
+
+    let title: Vec<u16> = "BlinkSpark"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    // SAFETY: Passing a null class pointer and a null-terminated title is valid.
+    let hwnd = unsafe { FindWindowW(std::ptr::null(), title.as_ptr()) };
+    (!hwnd.is_null()).then_some(hwnd)
 }
 
 #[cfg(target_os = "windows")]
@@ -731,6 +894,34 @@ fn window_position_file() -> PathBuf {
     PathBuf::from(".blinkspark-window-position.txt")
 }
 
+fn desktop_pin_file() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(app_data) = std::env::var_os("APPDATA") {
+            return PathBuf::from(app_data)
+                .join("BlinkSpark")
+                .join("desktop-pin.txt");
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(config_home) = std::env::var_os("XDG_CONFIG_HOME") {
+            return PathBuf::from(config_home)
+                .join("blinkspark")
+                .join("desktop-pin.txt");
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home)
+                .join(".config")
+                .join("blinkspark")
+                .join("desktop-pin.txt");
+        }
+    }
+
+    PathBuf::from(".blinkspark-desktop-pin.txt")
+}
+
 fn load_saved_window_position() -> Option<egui::Pos2> {
     let path = window_position_file();
     let raw = fs::read_to_string(path).ok()?;
@@ -751,6 +942,28 @@ fn save_window_position(path: &PathBuf, pos: egui::Pos2) -> io::Result<()> {
         fs::create_dir_all(parent)?;
     }
     fs::write(path, format!("{:.2},{:.2}\n", pos.x, pos.y))
+}
+
+fn load_saved_desktop_pin() -> bool {
+    let path = desktop_pin_file();
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(_) => return false,
+    };
+
+    matches!(
+        raw.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+fn save_desktop_pin(path: &PathBuf, pin_to_desktop: bool) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let serialized = if pin_to_desktop { "1\n" } else { "0\n" };
+    fs::write(path, serialized)
 }
 
 fn load_app_icon() -> Option<egui::IconData> {
@@ -892,6 +1105,14 @@ fn main() -> eframe::Result {
 
     let saved_position =
         load_saved_window_position().map(|pos| clamp_window_position(pos, WINDOW_SIZE));
+    let saved_pin_to_desktop = load_saved_desktop_pin();
+
+    #[cfg(target_os = "windows")]
+    {
+        start_windows_desktop_pin_guard();
+        set_windows_desktop_pin_enabled(saved_pin_to_desktop);
+    }
+
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("BlinkSpark")
         .with_inner_size(WINDOW_SIZE)
@@ -899,6 +1120,10 @@ fn main() -> eframe::Result {
         .with_position(saved_position.unwrap_or_else(|| initial_window_pos(WINDOW_SIZE)))
         .with_resizable(true)
         .with_transparent(true);
+
+    if saved_pin_to_desktop {
+        viewport = viewport.with_window_level(egui::WindowLevel::AlwaysOnBottom);
+    }
 
     if let Some(icon) = load_app_icon() {
         viewport = viewport.with_icon(icon);
@@ -915,7 +1140,11 @@ fn main() -> eframe::Result {
         Box::new(move |cc| {
             configure_fonts(&cc.egui_ctx);
             configure_visuals(&cc.egui_ctx);
-            Ok(Box::new(CountdownApp::new(args, saved_position)))
+            Ok(Box::new(CountdownApp::new(
+                args,
+                saved_position,
+                saved_pin_to_desktop,
+            )))
         }),
     )
 }
@@ -973,7 +1202,7 @@ mod tests {
             once: false,
             repeat: false,
         };
-        let mut app = CountdownApp::new(args, None);
+        let mut app = CountdownApp::new(args, None, false);
         app.displayed_progress = 0.37;
 
         app.reset_timer();
@@ -989,7 +1218,7 @@ mod tests {
             once: false,
             repeat: false,
         };
-        let mut app = CountdownApp::new(args, None);
+        let mut app = CountdownApp::new(args, None, false);
         let now = Instant::now();
         app.next_deadline = now - Duration::from_secs(1);
         app.displayed_progress = 0.04;
