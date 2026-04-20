@@ -12,7 +12,7 @@ use eframe::egui;
 #[cfg(target_os = "windows")]
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    OnceLock,
+    Mutex, OnceLock,
 };
 
 mod notifier;
@@ -162,10 +162,8 @@ impl Lang {
 
     fn pin_error_prefix(self) -> &'static str {
         match self {
-            Lang::Zh => {
-                "\u{4FDD}\u{5B58}\u{9489}\u{684C}\u{9762}\u{72B6}\u{6001}\u{5931}\u{8D25}\u{FF1A}"
-            }
-            Lang::En => "Failed to save desktop pin state:",
+            Lang::Zh => "\u{9489}\u{684C}\u{9762}\u{5904}\u{7406}\u{5931}\u{8D25}\u{FF1A}",
+            Lang::En => "Failed to apply desktop pin mode:",
         }
     }
 }
@@ -254,17 +252,36 @@ impl CountdownApp {
         }
 
         let level = if self.pin_to_desktop {
-            egui::WindowLevel::AlwaysOnBottom
+            #[cfg(target_os = "windows")]
+            {
+                egui::WindowLevel::Normal
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                egui::WindowLevel::AlwaysOnBottom
+            }
         } else {
             egui::WindowLevel::Normal
         };
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
 
         #[cfg(target_os = "windows")]
-        set_windows_desktop_pin_enabled(self.pin_to_desktop);
+        let native_pin_result = {
+            set_windows_desktop_pin_enabled(self.pin_to_desktop);
+            sync_windows_desktop_pin(self.pin_to_desktop)
+        };
 
         self.last_pin_error = match save_desktop_pin(&self.desktop_pin_path, self.pin_to_desktop) {
-            Ok(()) => None,
+            Ok(()) => {
+                #[cfg(target_os = "windows")]
+                {
+                    native_pin_result.err()
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    None
+                }
+            }
             Err(err) => Some(err.to_string()),
         };
         self.last_applied_pin_to_desktop = Some(self.pin_to_desktop);
@@ -753,24 +770,22 @@ fn desktop_pin_button(ui: &mut egui::Ui, label: &str, pinned: bool) -> egui::Res
 static WINDOWS_DESKTOP_PIN_ENABLED: AtomicBool = AtomicBool::new(false);
 #[cfg(target_os = "windows")]
 static WINDOWS_DESKTOP_PIN_GUARD: OnceLock<()> = OnceLock::new();
+#[cfg(target_os = "windows")]
+static WINDOWS_DESKTOP_PIN_STATE: OnceLock<Mutex<WindowsDesktopPinState>> = OnceLock::new();
+
+#[cfg(target_os = "windows")]
+#[derive(Default)]
+struct WindowsDesktopPinState {
+    original_parent: Option<isize>,
+    is_pinned: bool,
+}
 
 #[cfg(target_os = "windows")]
 fn start_windows_desktop_pin_guard() {
     WINDOWS_DESKTOP_PIN_GUARD.get_or_init(|| {
         std::thread::spawn(|| loop {
             if WINDOWS_DESKTOP_PIN_ENABLED.load(Ordering::Relaxed) {
-                if let Some(hwnd) = find_blinkspark_window() {
-                    use windows_sys::Win32::UI::WindowsAndMessaging::{
-                        IsIconic, ShowWindow, SW_RESTORE,
-                    };
-
-                    // SAFETY: hwnd is returned by FindWindowW and is valid at the point of use.
-                    let minimized = unsafe { IsIconic(hwnd) } != 0;
-                    if minimized {
-                        // SAFETY: Restoring a known top-level window handle is safe.
-                        unsafe { ShowWindow(hwnd, SW_RESTORE) };
-                    }
-                }
+                let _ = sync_windows_desktop_pin(true);
             }
             std::thread::sleep(Duration::from_millis(250));
         });
@@ -783,16 +798,190 @@ fn set_windows_desktop_pin_enabled(enabled: bool) {
 }
 
 #[cfg(target_os = "windows")]
-fn find_blinkspark_window() -> Option<windows_sys::Win32::Foundation::HWND> {
-    use windows_sys::Win32::UI::WindowsAndMessaging::FindWindowW;
+fn windows_desktop_pin_state() -> &'static Mutex<WindowsDesktopPinState> {
+    WINDOWS_DESKTOP_PIN_STATE.get_or_init(|| Mutex::new(WindowsDesktopPinState::default()))
+}
 
-    let title: Vec<u16> = "BlinkSpark"
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
-    // SAFETY: Passing a null class pointer and a null-terminated title is valid.
-    let hwnd = unsafe { FindWindowW(std::ptr::null(), title.as_ptr()) };
-    (!hwnd.is_null()).then_some(hwnd)
+#[cfg(target_os = "windows")]
+fn sync_windows_desktop_pin(enable: bool) -> Result<(), String> {
+    let hwnd = find_blinkspark_window().ok_or_else(|| "window handle not found".to_string())?;
+    if enable {
+        pin_window_to_desktop(hwnd)
+    } else {
+        unpin_window_from_desktop(hwnd)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn pin_window_to_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(), String> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetParent, SetParent, SetWindowPos, ShowWindow, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE,
+        SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+    };
+
+    let host = find_desktop_host_window().ok_or_else(|| "desktop host not found".to_string())?;
+
+    {
+        let mut state = windows_desktop_pin_state()
+            .lock()
+            .map_err(|_| "desktop pin state lock poisoned".to_string())?;
+
+        if !state.is_pinned {
+            // SAFETY: hwnd is a valid top-level window handle.
+            let previous_parent = unsafe { GetParent(hwnd) };
+            state.original_parent =
+                (!previous_parent.is_null()).then_some(previous_parent as isize);
+            state.is_pinned = true;
+        }
+    }
+
+    // SAFETY: hwnd and host are valid HWNDs managed by the current desktop session.
+    unsafe {
+        SetParent(hwnd, host);
+        ShowWindow(hwnd, SW_RESTORE);
+        SetWindowPos(
+            hwnd,
+            HWND_BOTTOM,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        );
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn unpin_window_from_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(), String> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SetParent, SetWindowPos, ShowWindow, HWND_NOTOPMOST, SWP_NOACTIVATE, SWP_NOMOVE,
+        SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+    };
+
+    let restore_parent = {
+        let mut state = windows_desktop_pin_state()
+            .lock()
+            .map_err(|_| "desktop pin state lock poisoned".to_string())?;
+        state.is_pinned = false;
+        state
+            .original_parent
+            .take()
+            .map_or(std::ptr::null_mut(), |hwnd| {
+                hwnd as windows_sys::Win32::Foundation::HWND
+            })
+    };
+
+    // SAFETY: hwnd is valid and restore_parent is either null or a parent HWND captured earlier.
+    unsafe {
+        SetParent(hwnd, restore_parent);
+        ShowWindow(hwnd, SW_RESTORE);
+        SetWindowPos(
+            hwnd,
+            HWND_NOTOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        );
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn find_blinkspark_window() -> Option<windows_sys::Win32::Foundation::HWND> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindow, GetWindowThreadProcessId, GW_OWNER,
+    };
+
+    #[derive(Default)]
+    struct Search {
+        pid: u32,
+        hwnd: windows_sys::Win32::Foundation::HWND,
+    }
+
+    unsafe extern "system" fn enum_window(
+        hwnd: windows_sys::Win32::Foundation::HWND,
+        lparam: windows_sys::Win32::Foundation::LPARAM,
+    ) -> i32 {
+        let search = unsafe { &mut *(lparam as *mut Search) };
+        let mut pid = 0_u32;
+        // SAFETY: hwnd is provided by EnumWindows; pid out pointer is valid.
+        unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+        // SAFETY: hwnd is valid; querying owner does not mutate memory.
+        let owner = unsafe { GetWindow(hwnd, GW_OWNER) };
+        if pid == search.pid && owner.is_null() {
+            search.hwnd = hwnd;
+            return 0;
+        }
+        1
+    }
+
+    let mut search = Search {
+        pid: std::process::id(),
+        hwnd: std::ptr::null_mut(),
+    };
+    // SAFETY: Callback and lparam point to live data for the call duration.
+    unsafe {
+        EnumWindows(Some(enum_window), &mut search as *mut Search as isize);
+    }
+
+    (!search.hwnd.is_null()).then_some(search.hwnd)
+}
+
+#[cfg(target_os = "windows")]
+fn find_desktop_host_window() -> Option<windows_sys::Win32::Foundation::HWND> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        FindWindowExW, FindWindowW, SendMessageTimeoutW, SMTO_NORMAL,
+    };
+
+    let progman = {
+        let class = wide_null("Progman");
+        // SAFETY: class is null-terminated and valid for the duration of the call.
+        unsafe { FindWindowW(class.as_ptr(), std::ptr::null()) }
+    };
+
+    if progman.is_null() {
+        return None;
+    }
+
+    // SAFETY: `progman` is a valid HWND; this message asks Explorer to ensure a WorkerW host exists.
+    unsafe {
+        SendMessageTimeoutW(
+            progman,
+            0x052C,
+            0,
+            0,
+            SMTO_NORMAL,
+            1_000,
+            std::ptr::null_mut(),
+        );
+    }
+
+    let workerw = {
+        let class = wide_null("WorkerW");
+        // SAFETY: class is null-terminated and valid for the duration of the call.
+        unsafe {
+            FindWindowExW(
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                class.as_ptr(),
+                std::ptr::null(),
+            )
+        }
+    };
+
+    if !workerw.is_null() {
+        Some(workerw)
+    } else {
+        Some(progman)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn wide_null(value: &str) -> Vec<u16> {
+    value.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 #[cfg(target_os = "windows")]
@@ -1121,6 +1310,7 @@ fn main() -> eframe::Result {
         .with_resizable(true)
         .with_transparent(true);
 
+    #[cfg(not(target_os = "windows"))]
     if saved_pin_to_desktop {
         viewport = viewport.with_window_level(egui::WindowLevel::AlwaysOnBottom);
     }
