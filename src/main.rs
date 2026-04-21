@@ -251,6 +251,19 @@ impl CountdownApp {
             return;
         }
 
+        #[cfg(target_os = "windows")]
+        {
+            if self.pin_to_desktop {
+                // Windows desktop-pinned windows are reparented and cannot reliably stay maximized.
+                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
+            }
+            ctx.send_viewport_cmd(egui::ViewportCommand::EnableButtons {
+                close: true,
+                minimized: true,
+                maximize: !self.pin_to_desktop,
+            });
+        }
+
         let level = if self.pin_to_desktop {
             #[cfg(target_os = "windows")]
             {
@@ -820,6 +833,8 @@ fn pin_window_to_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(
     };
 
     let host = find_desktop_host_window().ok_or_else(|| "desktop host not found".to_string())?;
+    let current_parent = unsafe { GetParent(hwnd) };
+    let already_pinned_to_host = current_parent == host;
 
     {
         let mut state = windows_desktop_pin_state()
@@ -828,10 +843,12 @@ fn pin_window_to_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(
 
         if !state.is_pinned {
             // SAFETY: hwnd is a valid top-level window handle.
-            let previous_parent = unsafe { GetParent(hwnd) };
             state.original_parent =
-                (!previous_parent.is_null()).then_some(previous_parent as isize);
+                (!current_parent.is_null()).then_some(current_parent as isize);
             state.is_pinned = true;
+        } else if already_pinned_to_host {
+            // Already pinned correctly. Avoid repeatedly restoring/reparenting every guard tick.
+            return Ok(());
         }
     }
 
@@ -1308,6 +1325,7 @@ fn main() -> eframe::Result {
         .with_min_inner_size(WINDOW_MIN_SIZE)
         .with_position(saved_position.unwrap_or_else(|| initial_window_pos(WINDOW_SIZE)))
         .with_resizable(true)
+        .with_maximize_button(!saved_pin_to_desktop)
         .with_transparent(true);
 
     #[cfg(not(target_os = "windows"))]
