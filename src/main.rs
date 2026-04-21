@@ -368,6 +368,16 @@ impl CountdownApp {
 
 impl eframe::App for CountdownApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        #[cfg(target_os = "windows")]
+        {
+            let maximize_requested =
+                ctx.input(|i| i.viewport().maximized).unwrap_or(false) && self.pin_to_desktop;
+            if maximize_requested {
+                self.pin_to_desktop = false;
+                self.last_applied_pin_to_desktop = None;
+            }
+        }
+
         self.apply_desktop_pin_mode(ctx);
         self.ensure_window_visible(ctx);
         self.maybe_persist_window_position(ctx, false);
@@ -821,13 +831,13 @@ fn sync_windows_desktop_pin(enable: bool) -> Result<(), String> {
 #[cfg(target_os = "windows")]
 fn pin_window_to_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(), String> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetParent, SetParent, SetWindowPos, ShowWindow, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE,
-        SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+        GetParent, IsWindow, SetParent, SetWindowPos, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE,
+        SWP_NOSIZE, SWP_SHOWWINDOW,
     };
 
     let host = find_desktop_host_window().ok_or_else(|| "desktop host not found".to_string())?;
     let current_parent = unsafe { GetParent(hwnd) };
-    let already_pinned_to_host = current_parent == host;
+    let already_has_valid_parent = !current_parent.is_null() && unsafe { IsWindow(current_parent) != 0 };
 
     {
         let mut state = windows_desktop_pin_state()
@@ -839,8 +849,8 @@ fn pin_window_to_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(
             state.original_parent =
                 (!current_parent.is_null()).then_some(current_parent as isize);
             state.is_pinned = true;
-        } else if already_pinned_to_host {
-            // Already pinned correctly. Avoid repeatedly restoring/reparenting every guard tick.
+        } else if already_has_valid_parent {
+            // Already parented. Avoid repeatedly reparenting every guard tick.
             return Ok(());
         }
     }
@@ -848,7 +858,6 @@ fn pin_window_to_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(
     // SAFETY: hwnd and host are valid HWNDs managed by the current desktop session.
     unsafe {
         SetParent(hwnd, host);
-        ShowWindow(hwnd, SW_RESTORE);
         SetWindowPos(
             hwnd,
             HWND_BOTTOM,
@@ -865,8 +874,8 @@ fn pin_window_to_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(
 #[cfg(target_os = "windows")]
 fn unpin_window_from_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(), String> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        SetParent, SetWindowPos, ShowWindow, HWND_NOTOPMOST, SWP_NOACTIVATE, SWP_NOMOVE,
-        SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+        SetParent, SetWindowPos, HWND_NOTOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+        SWP_SHOWWINDOW,
     };
 
     let restore_parent = {
@@ -885,7 +894,6 @@ fn unpin_window_from_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Resu
     // SAFETY: hwnd is valid and restore_parent is either null or a parent HWND captured earlier.
     unsafe {
         SetParent(hwnd, restore_parent);
-        ShowWindow(hwnd, SW_RESTORE);
         SetWindowPos(
             hwnd,
             HWND_NOTOPMOST,
