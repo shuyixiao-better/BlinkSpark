@@ -376,6 +376,12 @@ impl eframe::App for CountdownApp {
                 self.pin_to_desktop = false;
                 self.last_applied_pin_to_desktop = None;
             }
+
+            let minimize_requested =
+                ctx.input(|i| i.viewport().minimized).unwrap_or(false) && self.pin_to_desktop;
+            if minimize_requested {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+            }
         }
 
         self.apply_desktop_pin_mode(ctx);
@@ -831,13 +837,15 @@ fn sync_windows_desktop_pin(enable: bool) -> Result<(), String> {
 #[cfg(target_os = "windows")]
 fn pin_window_to_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(), String> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetParent, IsWindow, SetParent, SetWindowPos, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE,
-        SWP_NOSIZE, SWP_SHOWWINDOW,
+        GetParent, IsIconic, IsWindow, IsWindowVisible, SetParent, SetWindowPos, ShowWindow,
+        HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+        SW_SHOWNOACTIVATE,
     };
 
     let host = find_desktop_host_window().ok_or_else(|| "desktop host not found".to_string())?;
     let current_parent = unsafe { GetParent(hwnd) };
     let already_has_valid_parent = !current_parent.is_null() && unsafe { IsWindow(current_parent) != 0 };
+    let needs_visibility_restore = unsafe { IsIconic(hwnd) != 0 || IsWindowVisible(hwnd) == 0 };
 
     {
         let mut state = windows_desktop_pin_state()
@@ -849,9 +857,18 @@ fn pin_window_to_desktop(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(
             state.original_parent =
                 (!current_parent.is_null()).then_some(current_parent as isize);
             state.is_pinned = true;
-        } else if already_has_valid_parent {
+        } else if already_has_valid_parent && !needs_visibility_restore {
             // Already parented. Avoid repeatedly reparenting every guard tick.
             return Ok(());
+        }
+    }
+
+    // SAFETY: hwnd is a valid top-level window handle; this only restores a minimized/hidden window.
+    unsafe {
+        if IsIconic(hwnd) != 0 {
+            ShowWindow(hwnd, SW_RESTORE);
+        } else if IsWindowVisible(hwnd) == 0 {
+            ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         }
     }
 
