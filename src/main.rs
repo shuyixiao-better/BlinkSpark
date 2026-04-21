@@ -252,16 +252,9 @@ impl CountdownApp {
         }
 
         #[cfg(target_os = "windows")]
-        {
-            if self.pin_to_desktop {
-                // Windows desktop-pinned windows are reparented and cannot reliably stay maximized.
-                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
-            }
-            ctx.send_viewport_cmd(egui::ViewportCommand::EnableButtons {
-                close: true,
-                minimized: true,
-                maximize: !self.pin_to_desktop,
-            });
+        if self.pin_to_desktop {
+            // Windows desktop-pinned windows are reparented and cannot reliably stay maximized.
+            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
         }
 
         let level = if self.pin_to_desktop {
@@ -1325,7 +1318,6 @@ fn main() -> eframe::Result {
         .with_min_inner_size(WINDOW_MIN_SIZE)
         .with_position(saved_position.unwrap_or_else(|| initial_window_pos(WINDOW_SIZE)))
         .with_resizable(true)
-        .with_maximize_button(!saved_pin_to_desktop)
         .with_transparent(true);
 
     #[cfg(not(target_os = "windows"))]
